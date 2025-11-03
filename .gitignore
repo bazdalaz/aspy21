@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.build/
+dist/
+build/
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.Python
+*.egg
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment files (may contain secrets)
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Development context (contains session-specific info)
+CLAUDE.md
+WORKFLOW.md
+
+# Auto-generated version file
+src/aspy21/_version.py
