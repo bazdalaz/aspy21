@@ -134,7 +134,11 @@ class AspenClient:
         self._client.close()
 
     def _parse_multi_tag_sql_response(
-        self, response: list[dict], tag_names: list[str], include_status: bool = True
+        self,
+        response: list[dict],
+        tag_names: list[str],
+        include_status: bool,
+        max_rows: int,
     ) -> tuple[list[pd.DataFrame], dict[str, str]]:
         """Parse SQL history response for multiple tags into separate DataFrames.
 
@@ -202,6 +206,8 @@ class AspenClient:
                 if rows:
                     df = pd.DataFrame(rows)
                     df = df.set_index("time")
+                    if max_rows > 0:
+                        df = df.iloc[:max_rows]
                     if include_status and "status" in df.columns:
                         df = df.rename(columns={"status": f"{tag_name}_status"})
                     frames.append(df)
@@ -215,7 +221,7 @@ class AspenClient:
             return [], {}
 
     def _parse_sql_history_response(
-        self, response: list[dict], tag_name: str
+        self, response: list[dict], tag_name: str, max_rows: int
     ) -> tuple[pd.DataFrame, str]:
         """Parse SQL history response into DataFrame.
 
@@ -262,6 +268,8 @@ class AspenClient:
 
             df = pd.DataFrame(rows)
             df = df.set_index("time")
+            if max_rows > 0:
+                df = df.iloc[:max_rows]
 
             if "status" in df.columns:
                 df = df.rename(columns={"status": f"{tag_name}_status"})
@@ -325,7 +333,7 @@ class AspenClient:
             return pd.DataFrame(), {}
 
     def _parse_aspen_response(
-        self, response: dict, tag_name: str, include_status: bool = True
+        self, response: dict, tag_name: str, include_status: bool, max_rows: int
     ) -> tuple[pd.DataFrame, str]:
         """Parse Aspen REST API response into DataFrame.
 
@@ -403,6 +411,8 @@ class AspenClient:
             df = pd.DataFrame(rows)
             if not df.empty:
                 df = df.set_index("time")
+                if max_rows > 0:
+                    df = df.iloc[:max_rows]
 
             return df, description
 
@@ -557,10 +567,9 @@ class AspenClient:
 
         if effective_read_type == ReaderType.SNAPSHOT:
             if not self.datasource:
-                raise ValueError(
-                    "Datasource is required for SNAPSHOT reads. "
-                    "Please set datasource when creating AspenClient."
-                )
+                message = "Datasource is required for SNAPSHOT reads. "
+                message += "Please set datasource when creating AspenClient."
+                raise ValueError(message)
 
             xml_query = build_snapshot_sql_query(
                 tags=tags_list,
@@ -591,9 +600,8 @@ class AspenClient:
                 logger.error(f"Response status: {response.status_code}")
                 logger.error(f"Response headers: {dict(response.headers)}")
                 logger.error(f"Response content: {response.text[:1000]}")
-                raise ValueError(
-                    f"Snapshot SQL endpoint returned non-JSON response: {response.text[:200]}"
-                ) from e
+                message = "Failed to parse JSON response from snapshot SQL endpoint"
+                raise ValueError(message) from e
 
             snapshot_frame, snapshot_descriptions = self._parse_snapshot_sql_response(
                 sql_response,
@@ -680,7 +688,10 @@ class AspenClient:
 
                 # Parse multi-tag SQL response (response="Record" returns clean JSON array)
                 frames, tag_descriptions = self._parse_multi_tag_sql_response(
-                    sql_response, tags_list, include_status=include_status
+                    sql_response,
+                    tags_list,
+                    include_status=include_status,
+                    max_rows=max_rows,
                 )
                 logger.debug(f"Parsed data for {len(frames)} tag(s)")
 
@@ -709,7 +720,10 @@ class AspenClient:
 
                     # Parse the Aspen-style response
                     df, description = self._parse_aspen_response(
-                        response, tag, include_status=include_status
+                        response,
+                        tag,
+                        include_status=include_status,
+                        max_rows=max_rows,
                     )
                     logger.debug(f"Parsed {len(df)} data points for tag {tag}")
 

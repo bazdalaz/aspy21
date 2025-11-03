@@ -115,6 +115,48 @@ def test_max_rows_default(mock_api):
     c.close()
 
 
+def test_max_rows_enforced_single_tag(mock_api):
+    """Ensure max_rows limits the number of rows returned per tag."""
+    route = mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll")
+    route.mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "samples": [
+                            {"t": 1750406400000, "v": 1.0, "s": 8},
+                            {"t": 1750408200000, "v": 2.0, "s": 8},
+                            {"t": 1750410000000, "v": 3.0, "s": 8},
+                        ]
+                    }
+                ]
+            },
+        )
+    )
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+    )
+
+    df = c.read(
+        tags=["TAG1"],
+        start="2025-06-20 08:00:00",
+        end="2025-06-20 09:00:00",
+        read_type=ReaderType.RAW,
+        max_rows=2,
+        include_status=True,
+        as_json=False,
+    )
+
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) == 2
+    assert list(df.columns) == ["TAG1", "TAG1_status"]
+    c.close()
+
+
 def test_api_error_response(mock_api):
     """Test handling of API error responses."""
     # Mock API returning an error in the sample
