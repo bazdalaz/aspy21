@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: ❓ Questions & Discussions
+    url: https://github.com/bazdalaz/aspy21/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 🔒 Security Issues
+    url: https://github.com/bazdalaz/aspy21/security/advisories/new
+    about: Report security vulnerabilities privately

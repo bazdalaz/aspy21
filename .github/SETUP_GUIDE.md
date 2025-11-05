@@ -75,7 +75,8 @@ aspy21/
 │   ├── client.py        # AspenClient implementation
 │   ├── models.py        # Data models (ReaderType, etc.)
 │   ├── utils.py         # Utility functions
-│   └── cache.py         # Caching implementation
+│   ├── query_builder.py # Query building utilities
+│   └── readers/         # Reader strategy classes
 ├── tests/               # Test suite
 ├── .github/workflows/   # CI/CD pipelines
 ├── docs/                # Documentation
