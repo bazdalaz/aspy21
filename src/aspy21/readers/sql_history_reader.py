@@ -30,7 +30,7 @@ class SqlHistoryReader(BaseReader):
         from ..models import ReaderType as RT
 
         # Handle RAW/INT reads with datasource configured
-        return (
+        return bool(
             read_type in (RT.RAW, RT.INT)
             and self.datasource
             and start is not None
