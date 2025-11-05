@@ -8,16 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Initial project structure
-- AspenClient with REST API support
-- Support for analog, discrete, and text tags
-- Unified pandas DataFrame output
-- Built-in caching with SQLite
-- Automatic retry logic with tenacity
-- Type annotations and type checking
-- Comprehensive test suite
-- GitHub Actions CI/CD pipeline
-- MIT License
+- Transport abstraction via dependency injection of `httpx.Client`
+- Reader strategy pattern for better modularity and extensibility
+- Comprehensive GitHub issue templates (bug report, feature request, documentation)
+- GitHub pull request template
+- Enhanced CONTRIBUTING.md with detailed guidelines and examples
+- Additional README badges (codecov, ruff, pyright)
+- Test coverage for `utils.chunked` function
+
+### Changed
+- **BREAKING**: Refactored `AspenClient.read` method from ~344 lines to ~45 lines using strategy pattern
+- Split read logic into separate reader classes:
+  - `SnapshotReader` for current value reads
+  - `SqlHistoryReader` for batched SQL queries
+  - `XmlHistoryReader` for per-tag XML queries
+  - `DataFormatter` for output formatting
+- Improved testability through dependency injection
+
+### Removed
+- Unused `SmartCache` module (was placeholder, never integrated)
+
+### Fixed
+- Code organization and maintainability improvements
+- Better separation of concerns in client architecture
 
 ## [0.1.0] - 2025-10-29
 

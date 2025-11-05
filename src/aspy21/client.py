@@ -5,19 +5,13 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import httpx
 import pandas as pd
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .models import ReaderType
-from .query_builder import (
-    build_history_sql_query,
-    build_read_query,
-    build_snapshot_sql_query,
-    build_sql_search_query,
-)
+from .query_builder import build_sql_search_query
 
 if TYPE_CHECKING:
     from httpx import Auth
@@ -67,6 +61,7 @@ class AspenClient:
         timeout: float = 30.0,
         verify_ssl: bool = True,
         datasource: str | None = None,
+        http_client: httpx.Client | None = None,
     ) -> None:
         """Initialize the Aspen client.
 
@@ -77,6 +72,8 @@ class AspenClient:
             timeout: Request timeout in seconds (default: 30.0)
             verify_ssl: Whether to verify SSL certificates (default: True)
             datasource: Aspen datasource name. If None, uses server default.
+            http_client: Optional httpx.Client instance. If None, creates a new client.
+                        Useful for dependency injection and testing.
 
         Example:
             Using context manager with authentication:
@@ -97,6 +94,13 @@ class AspenClient:
                 ...     datasource="IP21"
                 ... ) as client:
                 ...     tags = client.search(tag="TEMP*")
+
+            With custom HTTP client (for testing or custom configuration):
+                >>> client = httpx.Client(timeout=60.0, verify=False)
+                >>> aspen = AspenClient(
+                ...     base_url="https://aspen.example.com/ProcessData",
+                ...     http_client=client
+                ... )
         """
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -104,7 +108,21 @@ class AspenClient:
         self.datasource = datasource or ""  # Empty string = use server default
         self.auth = auth
 
-        self._client = httpx.Client(timeout=timeout, verify=verify_ssl, auth=auth)
+        # Support dependency injection of HTTP client
+        self._owns_client = http_client is None
+        if http_client is None:
+            self._client = httpx.Client(timeout=timeout, verify=verify_ssl, auth=auth)
+        else:
+            self._client = http_client
+
+        # Initialize reader strategies
+        from .readers import SnapshotReader, SqlHistoryReader, XmlHistoryReader
+
+        self._readers = [
+            SnapshotReader(self.base_url, self.datasource, self._client),
+            SqlHistoryReader(self.base_url, self.datasource, self._client),
+            XmlHistoryReader(self.base_url, self.datasource, self._client),
+        ]
 
         logger.info(f"Initialized AspenClient for {self.base_url}")
         logger.debug(
@@ -130,341 +148,13 @@ class AspenClient:
         self.close()
 
     def close(self) -> None:
-        """Close the HTTP client connection."""
-        self._client.close()
+        """Close the HTTP client connection.
 
-    def _parse_multi_tag_sql_response(
-        self,
-        response: list[dict],
-        tag_names: list[str],
-        include_status: bool,
-        max_rows: int,
-    ) -> tuple[list[pd.DataFrame], dict[str, str]]:
-        """Parse SQL history response for multiple tags into separate DataFrames.
-
-        Args:
-            response: SQL response as list of record dictionaries (multi-tag data)
-            tag_names: List of tag names being queried
-            include_status: Whether status field is included in response
-
-        Returns:
-            Tuple of (list of DataFrames, dict of tag descriptions)
-
-        SQL response format for multiple tags:
-        [
-            {"ts": "2025-11-02T00:00:00.000000Z", "name": "TAG1",
-             "name->ip_description": "desc1", "value": 22.85, "status": 0},
-            {"ts": "2025-11-02T00:01:00.000000Z", "name": "TAG1", "value": 23.0, "status": 0},
-            {"ts": "2025-11-02T00:00:00.000000Z", "name": "TAG2", "value": 10.5, "status": 0},
-            ...
-        ]
+        Note: Only closes the client if it was created by AspenClient.
+        If a custom http_client was provided during initialization, it will not be closed.
         """
-        try:
-            if not response or not isinstance(response, list):
-                logger.warning("No data in SQL response")
-                return [], {}
-
-            # Group records by tag name
-            from collections import defaultdict
-
-            tag_records = defaultdict(list)
-            tag_descriptions = {}
-
-            for record in response:
-                tag_name = record.get("name")
-                if not tag_name:
-                    continue
-
-                tag_records[tag_name].append(record)
-
-                # Extract description from first record of each tag
-                if tag_name not in tag_descriptions and "name->ip_description" in record:
-                    tag_descriptions[tag_name] = record["name->ip_description"] or ""
-
-            # Build DataFrame for each tag
-            frames = []
-            for tag_name in tag_names:
-                records = tag_records.get(tag_name, [])
-
-                if not records:
-                    logger.warning(f"No data in SQL response for tag {tag_name}")
-                    continue
-
-                # Build DataFrame from records
-                rows = []
-                for record in records:
-                    timestamp = pd.to_datetime(record["ts"])
-                    value = record["value"]
-                    row = {"time": timestamp, tag_name: value}
-
-                    # Include status if present in response
-                    if include_status and "status" in record:
-                        row["status"] = record["status"]
-
-                    rows.append(row)
-
-                if rows:
-                    df = pd.DataFrame(rows)
-                    df = df.set_index("time")
-                    if max_rows > 0:
-                        df = df.iloc[:max_rows]
-                    if include_status and "status" in df.columns:
-                        df = df.rename(columns={"status": f"{tag_name}_status"})
-                    frames.append(df)
-                    logger.debug(f"Parsed {len(df)} data points for tag {tag_name}")
-
-            return frames, tag_descriptions
-
-        except Exception as e:
-            logger.error(f"Error parsing multi-tag SQL response: {e}")
-            logger.debug(f"Response was: {response}")
-            return [], {}
-
-    def _parse_sql_history_response(
-        self, response: list[dict], tag_name: str, max_rows: int
-    ) -> tuple[pd.DataFrame, str]:
-        """Parse SQL history response into DataFrame.
-
-        Args:
-            response: SQL response as list of record dictionaries
-            tag_name: Name of the tag being queried
-
-        Returns:
-            Tuple of (DataFrame with timestamp index and tag data, tag description)
-
-        SQL response format:
-        [
-            {"ts": "2025-11-02T00:00:00.000000Z", "name": "TAG",
-             "name->ip_description": "desc", "value": 22.85},
-            ...
-        ]
-        """
-        try:
-            if not response or not isinstance(response, list):
-                logger.warning(f"No data in SQL response for tag {tag_name}")
-                return pd.DataFrame(), ""
-
-            # Extract description from first record if available
-            description = ""
-            if response and "name->ip_description" in response[0]:
-                description = response[0]["name->ip_description"] or ""
-
-            # Build DataFrame from records
-            rows = []
-            for record in response:
-                timestamp = pd.to_datetime(record["ts"])
-                value = record["value"]
-                row = {"time": timestamp, tag_name: value}
-
-                # Include status if present in response
-                if "status" in record:
-                    row["status"] = record["status"]
-
-                rows.append(row)
-
-            if not rows:
-                logger.warning(f"No valid data in SQL response for tag {tag_name}")
-                return pd.DataFrame(), description
-
-            df = pd.DataFrame(rows)
-            df = df.set_index("time")
-            if max_rows > 0:
-                df = df.iloc[:max_rows]
-
-            if "status" in df.columns:
-                df = df.rename(columns={"status": f"{tag_name}_status"})
-
-            return df, description
-
-        except Exception as e:
-            logger.error(f"Error parsing SQL response for tag {tag_name}: {e}")
-            logger.debug(f"Response was: {response}")
-            return pd.DataFrame(), ""
-
-    def _parse_snapshot_sql_response(
-        self,
-        response: list[dict],
-        tag_names: list[str],
-        include_status: bool,
-        snapshot_time: pd.Timestamp,
-    ) -> tuple[pd.DataFrame, dict[str, str]]:
-        """Parse SQL snapshot response into DataFrame with descriptions/status."""
-        try:
-            if not response or not isinstance(response, list):
-                logger.warning("No data in snapshot SQL response")
-                return pd.DataFrame(), {}
-
-            values: dict[str, object] = {}
-            descriptions: dict[str, str] = {}
-            status_map: dict[str, object] = {}
-
-            for record in response:
-                tag_name = record.get("name")
-                if not tag_name or tag_name not in tag_names:
-                    continue
-
-                if "name->ip_input_value" in record:
-                    values[tag_name] = record.get("name->ip_input_value")
-
-                if "name->ip_description" in record and record["name->ip_description"] is not None:
-                    descriptions[tag_name] = record["name->ip_description"]
-
-                if include_status and "name->ip_input_quality" in record:
-                    status_map[tag_name] = record.get("name->ip_input_quality")
-
-            if not values:
-                logger.warning("Snapshot SQL response contained no values")
-                return pd.DataFrame(), descriptions
-
-            df = pd.DataFrame([values])
-            df.index = pd.DatetimeIndex([snapshot_time], name="time")
-
-            if include_status and status_map:
-                status_df = pd.DataFrame([status_map])
-                status_df.index = df.index
-                status_df.columns = [f"{col}_status" for col in status_df.columns]
-                df = pd.concat([df, status_df], axis=1)
-
-            return df, descriptions
-
-        except Exception as e:
-            logger.error(f"Error parsing snapshot SQL response: {e}")
-            logger.debug(f"Response was: {response}")
-            return pd.DataFrame(), {}
-
-    def _parse_aspen_response(
-        self, response: dict, tag_name: str, include_status: bool, max_rows: int
-    ) -> tuple[pd.DataFrame, str]:
-        """Parse Aspen REST API response into DataFrame.
-
-        Args:
-            response: Response dict from Aspen API
-            tag_name: Name of the tag being queried
-            include_status: Whether to include status column
-
-        Returns:
-            Tuple of (DataFrame with timestamp index and tag data, tag description)
-
-        Aspen API returns:
-        {
-          "data": [
-            {
-              "samples": [
-                {"t": timestamp_ms, "v": value, "s": status},
-                ...
-              ]
-            }
-          ]
-        }
-        """
-        try:
-            # Get data array
-            data = response.get("data", [])
-            if not data or not isinstance(data, list):
-                logger.warning(f"No data array in response for tag {tag_name}")
-                return pd.DataFrame(), ""
-
-            # Get first element (should contain samples)
-            tag_data = data[0] if len(data) > 0 else {}
-
-            # Extract description if available (from IP_DESCRIPTION field)
-            description = ""
-            if "l" in tag_data and isinstance(tag_data["l"], list) and len(tag_data["l"]) > 0:
-                # "l" contains list of field values, IP_DESCRIPTION is second field if requested
-                fields = tag_data["l"]
-                if len(fields) > 1:
-                    description = fields[1] if fields[1] is not None else ""
-
-            # Check for errors in samples
-            samples = tag_data.get("samples", [])
-            if samples and isinstance(samples, list) and len(samples) > 0:
-                first_sample = samples[0]
-                # Check if first sample contains an error
-                if "er" in first_sample and first_sample.get("er", 0) != 0:
-                    error_msg = first_sample.get("es", "Unknown error")
-                    logger.warning(f"API error for tag {tag_name}: {error_msg}")
-                    return pd.DataFrame(), description
-
-            if not samples:
-                logger.warning(f"No samples found for tag {tag_name}")
-                return pd.DataFrame(), description
-
-            # Build DataFrame
-            rows = []
-            for sample in samples:
-                # Skip error samples
-                if "er" in sample:
-                    continue
-
-                row = {
-                    "time": pd.to_datetime(sample["t"], unit="ms", utc=True).tz_convert(None),
-                    tag_name: sample.get("v"),
-                }
-                if include_status:
-                    row[f"{tag_name}_status"] = sample.get("s", 0)
-                rows.append(row)
-
-            if not rows:
-                logger.warning(f"No valid data samples for tag {tag_name}")
-                return pd.DataFrame(), description
-
-            df = pd.DataFrame(rows)
-            if not df.empty:
-                df = df.set_index("time")
-                if max_rows > 0:
-                    df = df.iloc[:max_rows]
-
-            return df, description
-
-        except Exception as e:
-            logger.error(f"Error parsing response for tag {tag_name}: {e}")
-            logger.debug(f"Response was: {response}")
-            return pd.DataFrame(), ""
-
-    @retry(wait=wait_exponential(multiplier=0.5, min=0.5, max=8), stop=stop_after_attempt(3))
-    def _fetch(self, xml_query: str) -> dict:
-        """Fetch data from API endpoint with automatic retry.
-
-        Args:
-            xml_query: XML query string
-
-        Returns:
-            JSON response as dictionary
-
-        Raises:
-            httpx.HTTPError: If the request fails after retries
-        """
-        logger.debug(f"POST {self.base_url}")
-        logger.debug(f"Query XML: {xml_query}")
-
-        try:
-            # Try sending XML as POST body with correct content type
-            r = self._client.post(
-                self.base_url, content=xml_query, headers={"Content-Type": "text/xml"}
-            )
-            logger.debug(f"Response status: {r.status_code}")
-            logger.debug(f"Response headers: {dict(r.headers)}")
-
-            r.raise_for_status()
-            response_data = r.json()
-
-            logger.debug(
-                f"Response data keys: {list(response_data.keys()) if response_data else 'empty'}"
-            )
-            logger.debug(f"Full response: {response_data}")  # Show complete response for debugging
-
-            return response_data
-
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP {e.response.status_code} error for {self.base_url}")
-            logger.error(f"Response body: {e.response.text[:500]}")
-            raise
-        except httpx.RequestError as e:
-            logger.error(f"Request error: {type(e).__name__}: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error: {type(e).__name__}: {e}")
-            raise
+        if self._owns_client:
+            self._client.close()
 
     def read(
         self,
@@ -525,291 +215,51 @@ class AspenClient:
             ...     as_df=True
             ... )
         """
+        from .readers import DataFormatter
+
         tags_list = list(tags)
         if not tags_list:
             raise ValueError("At least one tag is required")
 
+        # Auto-detect SNAPSHOT reads when start/end not provided
         effective_read_type = read_type
-        auto_snapshot = False
-        history_start: str | None = None
-        history_end: str | None = None
-
         if start is None or end is None:
             if effective_read_type != ReaderType.SNAPSHOT:
-                auto_snapshot = True
-            effective_read_type = ReaderType.SNAPSHOT
-        else:
-            history_start = cast(str, start)
-            history_end = cast(str, end)
-
-        if effective_read_type == ReaderType.SNAPSHOT:
-            if auto_snapshot:
                 logger.info(
                     "No start/end provided; defaulting to SNAPSHOT read for %d tag(s)",
                     len(tags_list),
                 )
-            logger.info(f"Reading {len(tags_list)} tag(s) snapshot values")
-        else:
-            assert history_start is not None and history_end is not None
-            logger.info(
-                "Reading %d tag(s) from %s to %s (max_rows=%d)",
-                len(tags_list),
-                history_start,
-                history_end,
-                max_rows,
-            )
+            effective_read_type = ReaderType.SNAPSHOT
 
         logger.debug(f"Tags: {tags_list}")
         logger.debug(f"Reader type: {effective_read_type.value}, Interval: {interval}")
 
-        frames: list[pd.DataFrame] = []
-        tag_descriptions: dict[str, str] = {}
-
-        if effective_read_type == ReaderType.SNAPSHOT:
-            if not self.datasource:
-                message = "Datasource is required for SNAPSHOT reads. "
-                message += "Please set datasource when creating AspenClient."
-                raise ValueError(message)
-
-            xml_query = build_snapshot_sql_query(
-                tags=tags_list,
-                datasource=self.datasource,
-                with_description=with_description,
-            )
-
-            sql_url = f"{self.base_url}/SQL"
-            logger.debug(f"POST {sql_url}")
-            logger.debug(f"Snapshot SQL query XML: {xml_query}")
-
-            response = self._client.post(
-                sql_url, content=xml_query, headers={"Content-Type": "text/xml"}
-            )
-            response.raise_for_status()
-
-            snapshot_time = pd.Timestamp.utcnow()
-            if snapshot_time.tzinfo is None:
-                snapshot_time = snapshot_time.tz_localize("UTC")
-            else:
-                snapshot_time = snapshot_time.tz_convert("UTC")
-            snapshot_time = snapshot_time.tz_convert(None)
-
-            try:
-                sql_response = response.json()
-            except Exception as e:
-                logger.error("Failed to parse JSON response from snapshot SQL endpoint")
-                logger.error(f"Response status: {response.status_code}")
-                logger.error(f"Response headers: {dict(response.headers)}")
-                logger.error(f"Response content: {response.text[:1000]}")
-                message = "Failed to parse JSON response from snapshot SQL endpoint"
-                raise ValueError(message) from e
-
-            snapshot_frame, snapshot_descriptions = self._parse_snapshot_sql_response(
-                sql_response,
-                tags_list,
-                include_status=include_status,
-                snapshot_time=snapshot_time,
-            )
-
-            if not snapshot_frame.empty:
-                frames.append(snapshot_frame)
-                tag_descriptions.update(snapshot_descriptions)
-
-        else:
-            # Determine if we should use SQL endpoint (for RAW/INT with datasource configured)
-            use_sql = effective_read_type in (ReaderType.RAW, ReaderType.INT) and self.datasource
-
-            if use_sql:
-                logger.debug(f"Using SQL endpoint for {effective_read_type.value} read")
-                logger.debug(f"Batching {len(tags_list)} tag(s) in single SQL query")
-
-                # Multiply max_rows by number of tags to ensure each tag gets fair share
-                # (SQL max_rows applies to total result set, not per tag)
-                batched_max_rows = max_rows * len(tags_list)
-                logger.debug(
-                    f"Adjusted max_rows from {max_rows} to {batched_max_rows} for batched query"
-                )
-
-                # Use SQL endpoint - batch all tags in a single query for performance
-                assert history_start is not None
-                assert history_end is not None
-
-                xml_query = build_history_sql_query(
-                    tags=tags_list,  # Pass all tags for batched query
-                    start=history_start,
-                    end=history_end,
-                    datasource=self.datasource,
-                    read_type=effective_read_type,
+        # Select appropriate reader strategy
+        for reader in self._readers:
+            if reader.can_handle(effective_read_type, start, end):
+                frames, tag_descriptions = reader.read(
+                    tags=tags_list,
+                    start=start,
+                    end=end,
                     interval=interval,
-                    max_rows=batched_max_rows,
-                    with_description=with_description,
-                    include_status=include_status,
-                )
-
-                sql_url = f"{self.base_url}/SQL"
-                logger.debug(f"POST {sql_url}")
-                logger.debug(f"SQL query XML: {xml_query}")
-
-                response = self._client.post(
-                    sql_url, content=xml_query, headers={"Content-Type": "text/xml"}
-                )
-                response.raise_for_status()
-
-                # Log response details for debugging
-                logger.debug(f"Response status: {response.status_code}")
-                logger.debug(
-                    f"Response content-type: {response.headers.get('content-type', 'unknown')}"
-                )
-                logger.debug(f"Response content (first 500 chars): {response.text[:500]}")
-
-                # Handle empty response (no data available)
-                if not response.text or response.headers.get("content-length") == "0":
-                    logger.warning(
-                        "SQL endpoint returned empty response "
-                        "(possibly unsupported tag type or no data in range)"
-                    )
-                    if not as_df:
-                        return []
-                    return pd.DataFrame()
-
-                try:
-                    sql_response = response.json()
-                except Exception as e:
-                    logger.error("Failed to parse JSON response from SQL endpoint")
-                    logger.error(f"Response status: {response.status_code}")
-                    logger.error(f"Response headers: {dict(response.headers)}")
-                    logger.error(f"Response content: {response.text[:1000]}")
-                    raise ValueError(
-                        f"SQL endpoint returned non-JSON response: {response.text[:200]}"
-                    ) from e
-
-                logger.debug(f"SQL response type: {type(sql_response)}")
-                response_length = len(sql_response) if isinstance(sql_response, list) else "N/A"
-                logger.debug(f"SQL response length: {response_length}")
-
-                # Parse multi-tag SQL response (response="Record" returns clean JSON array)
-                frames, tag_descriptions = self._parse_multi_tag_sql_response(
-                    sql_response,
-                    tags_list,
+                    read_type=effective_read_type,
                     include_status=include_status,
                     max_rows=max_rows,
+                    with_description=with_description,
                 )
-                logger.debug(f"Parsed data for {len(frames)} tag(s)")
+                break
+        else:
+            raise ValueError(f"No reader available for read_type={effective_read_type}")
 
-            else:
-                # Use original XML endpoint - still needs to loop over tags
-                logger.debug(f"Using XML endpoint for {effective_read_type.value} read")
-                for tag_idx, tag in enumerate(tags_list, 1):
-                    logger.debug(f"Processing tag {tag_idx}/{len(tags_list)}: {tag}")
-
-                    assert history_start is not None
-                    assert history_end is not None
-
-                    xml_query = build_read_query(
-                        tag=tag,
-                        start=history_start,
-                        end=history_end,
-                        read_type=effective_read_type,
-                        interval=interval,
-                        datasource=self.datasource,
-                        max_rows=max_rows,
-                        with_description=with_description,
-                    )
-
-                    response = self._fetch(xml_query)
-                    logger.debug(f"Received response for tag: {tag}")
-
-                    # Parse the Aspen-style response
-                    df, description = self._parse_aspen_response(
-                        response,
-                        tag,
-                        include_status=include_status,
-                        max_rows=max_rows,
-                    )
-                    logger.debug(f"Parsed {len(df)} data points for tag {tag}")
-
-                    if not df.empty:
-                        frames.append(df)
-                        if description:
-                            tag_descriptions[tag] = description
-
-        if not frames:
-            logger.warning("No data returned from API")
-            if not as_df:
-                return []
-            return pd.DataFrame()
-
-        # Merge frames by index (time), combining columns for different tags
-        out = pd.concat(frames, axis=1)
-        out = out.sort_index()
-
-        if with_description and as_df:
-            # Attach descriptions as dedicated columns and preserve metadata.
-            for tag in tags_list:
-                if tag in out.columns:
-                    desc_col = f"{tag}_description"
-                    description_value = tag_descriptions.get(tag)
-                    if description_value:
-                        out[desc_col] = description_value
-                    else:
-                        out[desc_col] = pd.NA
-            out.attrs["tag_descriptions"] = tag_descriptions
-
-        if include_status or (with_description and as_df):
-            ordered_cols: list[str] = []
-            for tag in tags_list:
-                if tag in out.columns:
-                    ordered_cols.append(tag)
-                    if with_description and as_df:
-                        desc_col = f"{tag}_description"
-                        if desc_col in out.columns:
-                            ordered_cols.append(desc_col)
-                    if include_status:
-                        status_col = f"{tag}_status"
-                        if status_col in out.columns:
-                            ordered_cols.append(status_col)
-            remaining_cols = [col for col in out.columns if col not in ordered_cols]
-            if ordered_cols:
-                out = out.loc[:, ordered_cols + remaining_cols]
-
-        logger.info(f"Successfully retrieved {len(out)} rows for {len(out.columns)} column(s)")
-
-        # Convert to JSON format if requested
-        if not as_df:
-            json_data: list[dict] = []
-            for idx, row in out.iterrows():
-                # Iterate through each tag (column) in this row
-                for tag in tags_list:
-                    if tag in row.index:
-                        value = row[tag]
-                        # Skip NaN values - use isinstance check to avoid Series.__bool__ issue
-                        if isinstance(value, (int, float, str)) and pd.notna(value):
-                            # idx is pandas Timestamp, which has isoformat method
-                            # type: ignore is needed because iterrows() returns Hashable for index
-                            ts = (
-                                idx.isoformat()  # type: ignore[union-attr]
-                                if hasattr(idx, "isoformat")
-                                else str(idx)
-                            )
-                            record: dict[str, object] = {
-                                "timestamp": ts,
-                                "tag": tag,
-                                "value": value,
-                            }
-                            if with_description:
-                                record["description"] = tag_descriptions.get(tag, "")
-                            if include_status:
-                                status_col = f"{tag}_status"
-                                if status_col in row.index:
-                                    status_value = row.get(status_col)
-                                    if isinstance(status_value, (int, float, str)) and pd.notna(
-                                        status_value
-                                    ):
-                                        record["status"] = status_value
-                            json_data.append(record)
-            logger.debug(f"Converted to {len(json_data)} JSON records")
-            return json_data
-
-        return out
+        # Format output using formatter
+        return DataFormatter.format_output(
+            frames=frames,
+            tags=tags_list,
+            tag_descriptions=tag_descriptions,
+            as_df=as_df,
+            include_status=include_status,
+            with_description=with_description,
+        )
 
     def _search_by_sql(
         self,
