@@ -33,7 +33,7 @@ def test_read_basic(mock_api):
     )
 
     df = c.read(
-        ["ATI111"], "2025-06-20 08:00:00", "2025-06-20 09:00:00", 600, ReaderType.RAW, as_json=False
+        ["ATI111"], "2025-06-20 08:00:00", "2025-06-20 09:00:00", 600, ReaderType.RAW, as_df=True
     )
     assert isinstance(df, pd.DataFrame)
     assert "ATI111" in df.columns
@@ -65,7 +65,7 @@ def test_max_rows_parameter(mock_api):
         end="2025-06-20 09:00:00",
         read_type=ReaderType.RAW,
         max_rows=250000,
-        as_json=False,
+        as_df=True,
     )
 
     # Verify the request was made
@@ -101,7 +101,7 @@ def test_max_rows_default(mock_api):
         start="2025-06-20 08:00:00",
         end="2025-06-20 09:00:00",
         read_type=ReaderType.RAW,
-        as_json=False,
+        as_df=True,
     )
 
     # Verify the request was made with default max_rows
@@ -148,7 +148,7 @@ def test_max_rows_enforced_single_tag(mock_api):
         read_type=ReaderType.RAW,
         max_rows=2,
         include_status=True,
-        as_json=False,
+        as_df=True,
     )
 
     assert isinstance(df, pd.DataFrame)
@@ -186,7 +186,7 @@ def test_api_error_response(mock_api):
         start="2025-06-20 08:00:00",
         end="2025-06-20 09:00:00",
         read_type=ReaderType.RAW,
-        as_json=False,
+        as_df=True,
     )
 
     # Should return empty DataFrame for error responses
@@ -249,7 +249,7 @@ def test_aggregated_read_with_interval(mock_api):
         end="2025-06-20 09:00:00",
         read_type=ReaderType.AVG,
         interval=600,  # 10 minutes
-        as_json=False,
+        as_df=True,
     )
 
     # Verify interval parameters are in the XML
@@ -301,7 +301,7 @@ def test_snapshot_read_uses_sql(mock_api, monkeypatch):
         end=None,
         read_type=ReaderType.SNAPSHOT,
         with_description=True,
-        as_json=False,
+        as_df=True,
     )
 
     assert route.called
@@ -345,7 +345,7 @@ def test_read_without_range_defaults_to_snapshot(mock_api, monkeypatch):
         datasource="IP21",
     )
 
-    df = c.read(tags=["TAG1"], as_json=False)
+    df = c.read(tags=["TAG1"], as_df=True)
 
     assert route.called
     assert isinstance(df, pd.DataFrame)
@@ -382,7 +382,7 @@ def test_read_without_range_snapshot_disallows_status(mock_api, monkeypatch):
         datasource="IP21",
     )
 
-    df = c.read(tags=["TAG1"], include_status=True, as_json=False)
+    df = c.read(tags=["TAG1"], include_status=True, as_df=True)
 
     assert route.called
     assert isinstance(df, pd.DataFrame)
@@ -391,7 +391,7 @@ def test_read_without_range_snapshot_disallows_status(mock_api, monkeypatch):
     assert df.loc[frozen_time, "TAG1_status"] == 128
 
     # Verify JSON output also includes status field
-    data_json = c.read(tags=["TAG1"], include_status=True, as_json=True)
+    data_json = c.read(tags=["TAG1"], include_status=True, as_df=False)
     assert isinstance(data_json, list)
     assert data_json
     record = data_json[0]
@@ -444,13 +444,20 @@ def test_sql_multi_tag_read_dataframe(mock_api):
         read_type=ReaderType.RAW,
         include_status=True,
         with_description=True,
-        as_json=False,
+        as_df=True,
     )
 
     assert route.called
     assert isinstance(df, pd.DataFrame)
     df = cast(pd.DataFrame, df)
-    assert list(df.columns) == ["TAG1", "TAG1_status", "TAG2", "TAG2_status"]
+    assert list(df.columns) == [
+        "TAG1",
+        "TAG1_description",
+        "TAG1_status",
+        "TAG2",
+        "TAG2_description",
+        "TAG2_status",
+    ]
     ts = pd.Timestamp("2025-06-20T08:00:00Z")
     assert df.loc[ts, "TAG1"] == 1.2
     assert df.loc[ts, "TAG2"] == 5.5
@@ -488,7 +495,7 @@ def test_datasource_parameter(mock_api):
         start="2025-06-20 08:00:00",
         end="2025-06-20 09:00:00",
         read_type=ReaderType.RAW,
-        as_json=False,
+        as_df=True,
     )
 
     # Verify datasource is in the SQL query XML
@@ -522,7 +529,7 @@ def test_empty_response(mock_api):
         start="2025-06-20 08:00:00",
         end="2025-06-20 09:00:00",
         read_type=ReaderType.RAW,
-        as_json=False,
+        as_df=True,
     )
 
     # Should return empty DataFrame
@@ -565,7 +572,7 @@ def test_xml_read_json_with_description(mock_api):
         read_type=ReaderType.RAW,
         with_description=True,
         include_status=True,
-        as_json=True,
+        as_df=False,
     )
 
     assert isinstance(data, list)
@@ -576,6 +583,45 @@ def test_xml_read_json_with_description(mock_api):
     assert record["value"] == 42.0
     assert record["timestamp"].startswith("2025-06-20T08:00:00")
     c.close()
+
+
+def test_xml_read_json_without_description_by_default(mock_api):
+    """Ensure descriptions are omitted from JSON unless explicitly requested."""
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "samples": [
+                            {"t": 1750406400000, "v": 42.0, "s": 4},
+                        ],
+                        "l": [
+                            None,
+                            "Flow indicator",
+                        ],
+                    }
+                ]
+            },
+        )
+    )
+
+    with AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+    ) as client:
+        data = client.read(
+            tags=["FI101"],
+            start="2025-06-20 08:00:00",
+            end="2025-06-20 09:00:00",
+            read_type=ReaderType.RAW,
+            as_df=False,
+        )
+
+    assert isinstance(data, list)
+    assert data
+    assert "description" not in data[0]
 
 
 def test_snapshot_sql_empty_response(mock_api):
@@ -594,7 +640,7 @@ def test_snapshot_sql_empty_response(mock_api):
     df = c.read(
         tags=["TAG1"],
         read_type=ReaderType.SNAPSHOT,
-        as_json=False,
+        as_df=True,
     )
 
     assert isinstance(df, pd.DataFrame)
@@ -950,7 +996,7 @@ def test_context_manager_basic(mock_api):
             start="2025-06-20 08:00:00",
             end="2025-06-20 09:00:00",
             read_type=ReaderType.RAW,
-            as_json=False,
+            as_df=True,
         )
         assert isinstance(df, pd.DataFrame)
         assert not df.empty
@@ -1003,8 +1049,8 @@ def test_context_manager_returns_self():
     client.close()
 
 
-def test_read_as_json_basic(mock_api):
-    """Test reading data with as_json=True returns list of dictionaries."""
+def test_read_as_df_basic(mock_api):
+    """Test reading data with as_df=False returns list of dictionaries."""
     mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
         return_value=httpx.Response(
             200,
@@ -1032,7 +1078,8 @@ def test_read_as_json_basic(mock_api):
             start="2024-01-01 12:00:00",
             end="2024-01-01 13:00:00",
             read_type=ReaderType.RAW,
-            as_json=True,
+            with_description=True,
+            as_df=False,
         )
 
         # Verify it's a list of dicts
@@ -1084,13 +1131,16 @@ def test_read_with_description_dataframe(mock_api):
             end="2024-01-01 13:00:00",
             read_type=ReaderType.RAW,
             with_description=True,
-            as_json=False,
+            as_df=True,
         )
 
-        # Should still return DataFrame when as_json=False
+        # Should still return DataFrame when as_df=True
         assert isinstance(df, pd.DataFrame)
         assert not df.empty
         assert "PRESS1" in df.columns
+        assert "PRESS1_description" in df.columns
+        assert df["PRESS1_description"].iloc[0] == "Pressure sensor"
+        assert df.attrs["tag_descriptions"]["PRESS1"] == "Pressure sensor"
 
         # Verify IP_DESCRIPTION field was requested in XML
         request = route.calls.last.request
@@ -1098,8 +1148,8 @@ def test_read_with_description_dataframe(mock_api):
         assert "<F><![CDATA[IP_DESCRIPTION]]></F>" in request_body
 
 
-def test_read_as_json_multiple_tags(mock_api):
-    """Test as_json with multiple tags."""
+def test_read_as_df_multiple_tags(mock_api):
+    """Test as_df with multiple tags."""
 
     def response_handler(request):
         # Return different data based on which tag is requested
@@ -1147,7 +1197,8 @@ def test_read_as_json_multiple_tags(mock_api):
             start="2024-01-01 12:00:00",
             end="2024-01-01 13:00:00",
             read_type=ReaderType.RAW,
-            as_json=True,
+            with_description=True,
+            as_df=False,
         )
 
         # Should have 2 records (one per tag, same timestamp)
@@ -1169,8 +1220,8 @@ def test_read_as_json_multiple_tags(mock_api):
         assert tag2_record["value"] == 101.3
 
 
-def test_read_as_json_empty_response(mock_api):
-    """Test as_json=True with empty response returns empty list."""
+def test_read_as_df_empty_response(mock_api):
+    """Test as_df=False with empty response returns empty list."""
     mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
         return_value=httpx.Response(
             200,
@@ -1188,7 +1239,7 @@ def test_read_as_json_empty_response(mock_api):
             start="2024-01-01 12:00:00",
             end="2024-01-01 13:00:00",
             read_type=ReaderType.RAW,
-            as_json=True,
+            as_df=False,
         )
 
         # Should return empty list
@@ -1196,8 +1247,8 @@ def test_read_as_json_empty_response(mock_api):
         assert len(data) == 0
 
 
-def test_read_as_json_without_description(mock_api):
-    """Test as_json=True when description is not available in response."""
+def test_read_as_df_without_description(mock_api):
+    """Test as_df=False when description is requested but not available in response."""
     mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
         return_value=httpx.Response(
             200,
@@ -1224,10 +1275,12 @@ def test_read_as_json_without_description(mock_api):
             start="2024-01-01 12:00:00",
             end="2024-01-01 13:00:00",
             read_type=ReaderType.RAW,
-            as_json=True,
+            with_description=True,
+            as_df=False,
         )
 
         # Should still work, but description should be empty string
         assert len(data) == 1
+        assert "description" in data[0]
         assert data[0]["description"] == ""
         assert data[0]["value"] == 25.5

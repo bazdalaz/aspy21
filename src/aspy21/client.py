@@ -475,7 +475,7 @@ class AspenClient:
         read_type: ReaderType = ReaderType.INT,
         include_status: bool = False,
         max_rows: int = 100000,
-        as_json: bool = True,
+        as_df: bool = False,
         with_description: bool = False,
     ) -> pd.DataFrame | list[dict]:
         """Read process data for multiple tags.
@@ -490,17 +490,17 @@ class AspenClient:
             read_type: Type of data retrieval (RAW, INT, SNAPSHOT, AVG) (default: INT)
             include_status: Include status column in output (default: False)
             max_rows: Maximum number of rows to return per tag (default: 100000)
-            as_json: Return data as list of dictionaries instead of DataFrame (default: True)
+            as_df: Return data as pandas DataFrame instead of JSON list (default: False)
             with_description: Include tag descriptions in response (default: False).
                              Note: Some Aspen servers may not support this field.
 
         Returns:
-            If as_json=False: pandas DataFrame with time index and columns for each tag.
-                             If include_status=True, includes a 'status' column.
-            If as_json=True: List of dictionaries, each containing:
+            If as_df=True: pandas DataFrame with time index and columns for each tag.
+                           If include_status=True, includes a 'status' column.
+            If as_df=False: List of dictionaries, each containing:
                             - timestamp: ISO format timestamp string
                             - tag: Tag name
-                            - description: Tag description (from IP_DESCRIPTION field)
+                            - description: Tag description (when requested via with_description)
                             - value: Tag value
 
         Example:
@@ -522,7 +522,7 @@ class AspenClient:
             ...     ["ATI111", "AP101.PV"],
             ...     start="2025-01-01 00:00:00",
             ...     end="2025-01-01 01:00:00",
-            ...     as_json=False
+            ...     as_df=True
             ... )
         """
         tags_list = list(tags)
@@ -574,7 +574,7 @@ class AspenClient:
             xml_query = build_snapshot_sql_query(
                 tags=tags_list,
                 datasource=self.datasource,
-                with_description=with_description or as_json,
+                with_description=with_description,
             )
 
             sql_url = f"{self.base_url}/SQL"
@@ -641,7 +641,7 @@ class AspenClient:
                     read_type=effective_read_type,
                     interval=interval,
                     max_rows=batched_max_rows,
-                    with_description=with_description or as_json,
+                    with_description=with_description,
                     include_status=include_status,
                 )
 
@@ -667,7 +667,7 @@ class AspenClient:
                         "SQL endpoint returned empty response "
                         "(possibly unsupported tag type or no data in range)"
                     )
-                    if as_json:
+                    if not as_df:
                         return []
                     return pd.DataFrame()
 
@@ -734,7 +734,7 @@ class AspenClient:
 
         if not frames:
             logger.warning("No data returned from API")
-            if as_json:
+            if not as_df:
                 return []
             return pd.DataFrame()
 
@@ -742,14 +742,31 @@ class AspenClient:
         out = pd.concat(frames, axis=1)
         out = out.sort_index()
 
-        if include_status:
+        if with_description and as_df:
+            # Attach descriptions as dedicated columns and preserve metadata.
+            for tag in tags_list:
+                if tag in out.columns:
+                    desc_col = f"{tag}_description"
+                    description_value = tag_descriptions.get(tag)
+                    if description_value:
+                        out[desc_col] = description_value
+                    else:
+                        out[desc_col] = pd.NA
+            out.attrs["tag_descriptions"] = tag_descriptions
+
+        if include_status or (with_description and as_df):
             ordered_cols: list[str] = []
             for tag in tags_list:
                 if tag in out.columns:
                     ordered_cols.append(tag)
-                    status_col = f"{tag}_status"
-                    if status_col in out.columns:
-                        ordered_cols.append(status_col)
+                    if with_description and as_df:
+                        desc_col = f"{tag}_description"
+                        if desc_col in out.columns:
+                            ordered_cols.append(desc_col)
+                    if include_status:
+                        status_col = f"{tag}_status"
+                        if status_col in out.columns:
+                            ordered_cols.append(status_col)
             remaining_cols = [col for col in out.columns if col not in ordered_cols]
             if ordered_cols:
                 out = out.loc[:, ordered_cols + remaining_cols]
@@ -757,7 +774,7 @@ class AspenClient:
         logger.info(f"Successfully retrieved {len(out)} rows for {len(out.columns)} column(s)")
 
         # Convert to JSON format if requested
-        if as_json:
+        if not as_df:
             json_data: list[dict] = []
             for idx, row in out.iterrows():
                 # Iterate through each tag (column) in this row
@@ -776,9 +793,10 @@ class AspenClient:
                             record: dict[str, object] = {
                                 "timestamp": ts,
                                 "tag": tag,
-                                "description": tag_descriptions.get(tag, ""),
                                 "value": value,
                             }
+                            if with_description:
+                                record["description"] = tag_descriptions.get(tag, "")
                             if include_status:
                                 status_col = f"{tag}_status"
                                 if status_col in row.index:

@@ -72,7 +72,8 @@ with AspenClient(
         start="2025-06-20 08:00:00",
         end="2025-06-20 09:00:00",
         interval=600,
-        read_type=ReaderType.RAW
+        read_type=ReaderType.RAW,
+        as_df=True,
     )
 
     print(df)
@@ -135,12 +136,16 @@ with AspenClient(
 | `read_type` | ReaderType | INT | Data retrieval mode (auto-coerced to SNAPSHOT if no range provided) |
 | `include_status` | bool | False | Include a `<tag>_status` column (historical status or snapshot quality) |
 | `max_rows` | int | 100000 | Maximum rows to return per tag |
+| `with_description` | bool | False | Request tag descriptions (`ip_description`) alongside values |
+| `as_df` | bool | False | Return results as a pandas DataFrame instead of JSON list |
 
-**Returns**: pandas.DataFrame with time index and columns for each tag.
+**Returns**:
+- If `as_df=True`: pandas.DataFrame with time index and columns for each tag.
+- If `as_df=False`: List of dictionaries including `timestamp`, `tag`, `value`, and optional `description`/`status`.
 
 > **Snapshot reads:**
 > - Supplying no `start`/`end` (or explicitly choosing `ReaderType.SNAPSHOT`) issues a snapshot SQL query that returns the latest value plus `ip_description`.
-> - When `include_status=True`, the snapshot response also includes the `ip_input_quality` code, exposed as a `<tag>_status` column (and as `status` in JSON output) alongside the value. The timestamp reflects the request time.
+> - When `include_status=True`, the snapshot response also includes the `ip_input_quality` code, exposed as a `<tag>_status` column (and as `status` in JSON output when `as_df=False`) alongside the value. The timestamp reflects the request time.
 
 ### search() Method
 
@@ -237,7 +242,8 @@ try:
         df = client.read(
             tags=["ATI111"],
             start="2025-06-20 08:00:00",
-            end="2025-06-20 09:00:00"
+            end="2025-06-20 09:00:00",
+            as_df=True,
         )
 except httpx.HTTPStatusError as e:
     print(f"HTTP error: {e.response.status_code}")

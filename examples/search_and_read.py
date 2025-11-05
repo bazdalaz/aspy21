@@ -66,8 +66,9 @@ try:
                 start="2025-01-31 08:00:00",
                 end="2025-01-31 09:00:00",
                 read_type=ReaderType.RAW,
+                as_df=True,
             )
-            # Type narrowing: as_json=False (default) guarantees pd.DataFrame
+            # Type narrowing: as_df=True guarantees pd.DataFrame
             assert isinstance(result, pd.DataFrame)
             df: pd.DataFrame = result
 
@@ -103,8 +104,9 @@ try:
                 end="2025-01-31 09:00:00",
                 read_type=ReaderType.AVG,
                 interval=600,  # 10 minute averages
+                as_df=True,
             )
-            # Type narrowing: as_json=False (default) guarantees pd.DataFrame
+            # Type narrowing: as_df=True guarantees pd.DataFrame
             assert isinstance(result, pd.DataFrame)
             df: pd.DataFrame = result
 
@@ -134,8 +136,9 @@ try:
                 end="2025-01-31 12:00:00",
                 read_type=ReaderType.AVG,
                 interval=3600,  # 1 hour averages
+                as_df=True,
             )
-            # Type narrowing: as_json=False (default) guarantees pd.DataFrame
+            # Type narrowing: as_df=True guarantees pd.DataFrame
             assert isinstance(result, pd.DataFrame)
             df: pd.DataFrame = result
 
@@ -175,8 +178,9 @@ try:
                 start="2025-01-31 08:00:00",
                 end="2025-01-31 09:00:00",
                 read_type=ReaderType.RAW,
+                as_df=True,
             )
-            # Type narrowing: as_json=False (default) guarantees pd.DataFrame
+            # Type narrowing: as_df=True guarantees pd.DataFrame
             assert isinstance(result, pd.DataFrame)
             df: pd.DataFrame = result
 
