@@ -1,6 +1,5 @@
 """Tests for utility functions."""
 
-
 from aspy21.utils import chunked
 
 
