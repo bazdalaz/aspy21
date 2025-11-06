@@ -7,7 +7,7 @@ Each parser handles a specific response format (SQL snapshot, SQL history, XML h
 from __future__ import annotations
 
 import logging
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections import defaultdict
 
 import pandas as pd
@@ -15,21 +15,18 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-class ResponseParser(ABC):
+class ResponseParser(ABC):  # noqa: B024
     """Abstract base class for response parsing strategies.
 
     Each parser implements a specific strategy for parsing API responses
     into pandas DataFrames with metadata (descriptions, status).
+
+    Note: Subclasses implement parse() with signatures specific to their
+    response format. The varying signatures are intentional as each parser
+    handles fundamentally different API response structures.
     """
 
-    @abstractmethod
-    def parse(self, *args, **kwargs):
-        """Parse API response into DataFrame(s) and metadata.
-
-        The signature varies by parser implementation based on the specific
-        response format and requirements.
-        """
-        pass
+    pass
 
 
 class SqlSnapshotResponseParser(ResponseParser):

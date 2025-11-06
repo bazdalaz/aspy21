@@ -12,6 +12,8 @@ from .base_reader import BaseReader
 from .response_parser import SqlSnapshotResponseParser
 
 if TYPE_CHECKING:
+    import httpx
+
     from ..models import ReaderType
 
 logger = logging.getLogger(__name__)
@@ -20,15 +22,15 @@ logger = logging.getLogger(__name__)
 class SnapshotReader(BaseReader):
     """Reader for snapshot (current value) reads using SQL endpoint."""
 
-    def __init__(self, base_url: str, http_client, datasource: str | None = None):
+    def __init__(self, base_url: str, datasource: str, http_client: httpx.Client):
         """Initialize snapshot reader with response parser.
 
         Args:
             base_url: Base URL for the API
+            datasource: Datasource name
             http_client: HTTP client for making requests
-            datasource: Optional datasource name
         """
-        super().__init__(base_url, http_client, datasource)
+        super().__init__(base_url, datasource, http_client)
         self.parser = SqlSnapshotResponseParser()
 
     def can_handle(
