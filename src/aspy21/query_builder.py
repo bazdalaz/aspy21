@@ -439,4 +439,3 @@ def build_sql_search_query(
         tag_pattern=tag_pattern,
         max_results=max_results,
     )
-
