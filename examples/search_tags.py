@@ -71,7 +71,9 @@ try:
         # Example 3: Combine tag pattern and description
         print("Example 3: Search 'AI*' tags with 'temperature' in description")
         print("-" * 80)
-        tags_raw = client.search("AI*", description="temperature", limit=10, include=IncludeFields.DESCRIPTION)
+        tags_raw = client.search(
+            "AI*", description="temperature", limit=10, include=IncludeFields.DESCRIPTION
+        )
         # Type narrowing: include=DESCRIPTION guarantees list[dict[str, str]]
         assert isinstance(tags_raw, list) and (not tags_raw or isinstance(tags_raw[0], dict))
         tags: list[dict[str, str]] = tags_raw  # type: ignore[assignment]

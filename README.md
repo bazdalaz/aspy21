@@ -23,13 +23,15 @@
 
 - REST-based communication with Aspen IP.21 historian
 - Basic HTTP authentication (cross-platform compatible)
+- **Hybrid search mode**: Search for tags and read their data in one call
 - Tag search with wildcards and description filtering
 - Unified interface for analog, discrete, and text tags
 - Support for RAW, INT, SNAPSHOT, and AVG reader types
-- Pandas DataFrame output with optional status columns
+- Pandas DataFrame or JSON output with optional status and description fields
+- Enum-based parameters for cleaner, type-safe API
 - Configurable row limits and query parameters
 - Built-in retry logic with exponential backoff
-- Type-annotated and fully tested
+- Type-annotated and fully tested (85% coverage)
 
 ### Use Cases
 
@@ -62,7 +64,7 @@ pip install aspy21
 ### Basic Usage with Context Manager
 
 ```python
-from aspy21 import AspenClient, ReaderType
+from aspy21 import AspenClient, OutputFormat, ReaderType
 
 # Initialize client using context manager (recommended)
 with AspenClient(
@@ -71,12 +73,12 @@ with AspenClient(
 ) as client:
     # Read historical data
     df = client.read(
-        tags=["ATI111", "AP101.PV"],
+        ["ATI111", "AP101.PV"],
         start="2025-06-20 08:00:00",
         end="2025-06-20 09:00:00",
         interval=600,
         read_type=ReaderType.RAW,
-        as_df=True,
+        output=OutputFormat.DATAFRAME,
     )
 
     print(df)
@@ -128,50 +130,114 @@ with AspenClient(
 
 ### read() Method
 
+Read historical or snapshot data for multiple tags.
+
+**Signature**:
+```python
+def read(
+    tags: list[str],
+    *,
+    start: str | None = None,
+    end: str | None = None,
+    interval: int | None = None,
+    read_type: ReaderType = ReaderType.INT,
+    include: IncludeFields = IncludeFields.NONE,
+    limit: int = 100_000,
+    output: OutputFormat = OutputFormat.JSON,
+) -> pd.DataFrame | list[dict]:
+```
+
 **Parameters**:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `tags` | Iterable[str] | required | List of tag names to retrieve |
-| `start` | str\|None | None | Start timestamp (ISO format). When omitted, falls back to a SNAPSHOT read. |
-| `end` | str\|None | None | End timestamp (ISO format). When omitted, falls back to a SNAPSHOT read. |
-| `interval` | int\|None | None | Interval in seconds for aggregated data |
-| `read_type` | ReaderType | INT | Data retrieval mode (auto-coerced to SNAPSHOT if no range provided) |
-| `include_status` | bool | False | Include a `<tag>_status` column (historical status or snapshot quality) |
-| `max_rows` | int | 100000 | Maximum rows to return per tag |
-| `with_description` | bool | False | Request tag descriptions (`ip_description`) alongside values |
-| `as_df` | bool | False | Return results as a pandas DataFrame instead of JSON list |
+| `tags` | list[str] | required | List of tag names to retrieve (positional-only) |
+| `start` | str\|None | None | Start timestamp (ISO format). When omitted, defaults to SNAPSHOT read. |
+| `end` | str\|None | None | End timestamp (ISO format). When omitted, defaults to SNAPSHOT read. |
+| `interval` | int\|None | None | Interval in seconds for aggregated data (AVG reads) |
+| `read_type` | ReaderType | INT | Data retrieval mode (RAW, INT, SNAPSHOT, AVG) |
+| `include` | IncludeFields | NONE | Which optional fields to include (NONE, STATUS, DESCRIPTION, ALL) |
+| `limit` | int | 100000 | Maximum rows to return per tag |
+| `output` | OutputFormat | JSON | Output format (JSON or DATAFRAME) |
 
 **Returns**:
-- If `as_df=True`: pandas.DataFrame with time index and columns for each tag.
-- If `as_df=False`: List of dictionaries including `timestamp`, `tag`, `value`, and optional `description`/`status`.
+- If `output=OutputFormat.DATAFRAME`: pandas.DataFrame with time index and columns for each tag.
+- If `output=OutputFormat.JSON`: List of dictionaries with `timestamp`, `tag`, `value`, and optional `description`/`status` fields.
+
+**Examples**:
+```python
+# JSON output (default)
+data = client.read(
+    ["ATI111"],
+    start="2025-01-01 00:00:00",
+    end="2025-01-01 01:00:00"
+)
+
+# DataFrame output with status and descriptions
+df = client.read(
+    ["ATI111", "AP101.PV"],
+    start="2025-01-01 00:00:00",
+    end="2025-01-01 01:00:00",
+    output=OutputFormat.DATAFRAME,
+    include=IncludeFields.ALL
+)
+```
 
 > **Snapshot reads:**
-> - Supplying no `start`/`end` (or explicitly choosing `ReaderType.SNAPSHOT`) issues a snapshot SQL query that returns the latest value plus `ip_description`.
-> - When `include_status=True`, the snapshot response also includes the `ip_input_quality` code, exposed as a `<tag>_status` column (and as `status` in JSON output when `as_df=False`) alongside the value. The timestamp reflects the request time.
+> - Supplying no `start`/`end` (or explicitly choosing `ReaderType.SNAPSHOT`) returns the latest values.
+> - When `include=IncludeFields.STATUS` or `IncludeFields.ALL`, includes quality/status codes.
 
 ### search() Method
 
+Search for tags by name pattern and/or description. Optionally read their data in hybrid mode.
+
+**Signature**:
+```python
+def search(
+    tag: str = "*",
+    *,
+    description: str | None = None,
+    case_sensitive: bool = False,
+    limit: int = 10_000,
+    # Optional read parameters for hybrid mode
+    start: str | None = None,
+    end: str | None = None,
+    interval: int | None = None,
+    read_type: ReaderType = ReaderType.INT,
+    include: IncludeFields = IncludeFields.NONE,
+    output: OutputFormat = OutputFormat.JSON,
+) -> pd.DataFrame | list[dict] | list[str]:
+```
+
 **Parameters**:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `tag` | str | `"*"` | Tag name pattern with wildcards (`*`, `?`). Defaults to `"*"` (all tags). |
-| `description` | str\|None | None | Description filter (case-insensitive substring). When provided, uses SQL endpoint for server-side search. |
-| `case_sensitive` | bool | False | Whether tag matching is case-sensitive (Browse endpoint only) |
-| `max_results` | int | 10000 | Maximum number of results to return |
-| `return_desc` | bool | True | Whether to return descriptions. If True, returns dicts. If False, returns tag names only. |
+| `tag` | str | `"*"` | Tag name pattern with wildcards (`*`, `?`) |
+| `description` | str\|None | None | Description filter (case-insensitive). Uses SQL endpoint when provided. |
+| `case_sensitive` | bool | False | Case-sensitive tag matching (Browse endpoint only) |
+| `limit` | int | 10000 | Max results (search mode) or max rows per tag (hybrid mode) |
+| `start` | str\|None | None | **Triggers hybrid mode**: Start timestamp for data retrieval |
+| `end` | str\|None | None | End timestamp (defaults to current time if omitted) |
+| `interval` | int\|None | None | Interval in seconds for aggregated data |
+| `read_type` | ReaderType | INT | Data retrieval mode for hybrid mode |
+| `include` | IncludeFields | NONE | Fields to include (NONE, STATUS, DESCRIPTION, ALL) |
+| `output` | OutputFormat | JSON | Output format (JSON or DATAFRAME) |
 
 **Returns**:
-- If `return_desc=True`: List of dicts with 'name' and 'description' keys
-- If `return_desc=False`: List of tag name strings
+- **Search-only mode** (no `start`):
+  - If `include=NONE` or `STATUS`: List of tag name strings
+  - If `include=DESCRIPTION` or `ALL`: List of dicts with 'name' and 'description'
+- **Hybrid mode** (with `start`):
+  - If `output=JSON`: List of dicts with timestamp, tag, value, and optional fields
+  - If `output=DATAFRAME`: pandas DataFrame
 
 **Requirements**:
 - `datasource` must be configured in AspenClient
 
-**Search Modes**:
-- **Tag-only search** (no description): Uses Browse endpoint for fast tag name matching
-- **Description search** (description provided): Uses SQL endpoint for server-side description filtering
+**Modes**:
+1. **Search-only** (no `start`): Find tags matching criteria
+2. **Hybrid mode** (with `start`): Search for tags AND read their data in one call
 
 **Wildcards**:
 - `*` - Matches any number of characters
@@ -179,29 +245,71 @@ with AspenClient(
 
 **Examples**:
 ```python
-# Find all temperature tags with descriptions (Browse endpoint)
-tags = client.search(tag="TEMP*")
-# Returns: [{"name": "TEMP_101", "description": "Reactor temp"}, ...]
-
-# Get just tag names without descriptions
-tag_names = client.search(tag="TEMP*", return_desc=False)
+# Search-only: Get tag names (default)
+tag_names = client.search("TEMP*")
 # Returns: ["TEMP_101", "TEMP_102", ...]
 
-# Search by description only (SQL endpoint)
-reactor_tags = client.search(description="reactor")
+# Search-only: Get tags with descriptions
+tags = client.search("TEMP*", include=IncludeFields.DESCRIPTION)
+# Returns: [{"name": "TEMP_101", "description": "Reactor temp"}, ...]
 
-# Combine tag pattern and description (SQL endpoint)
-pressure_tags = client.search(tag="AI_1*", description="pressure")
+# Hybrid mode: Search and read data in one call
+df = client.search(
+    "TEMP*",
+    start="2025-01-01 00:00:00",
+    end="2025-01-01 01:00:00",
+    output=OutputFormat.DATAFRAME
+)
+# Returns: DataFrame with data for all TEMP* tags
+
+# Search by description (SQL endpoint)
+tags = client.search(description="reactor", include=IncludeFields.DESCRIPTION)
+
+# Combine pattern and description
+tags = client.search("AI_1*", description="pressure", include=IncludeFields.DESCRIPTION)
 ```
 
-### ReaderType Enum
+### Enums
 
-Available reader types:
+#### ReaderType
 
-- `ReaderType.RAW` - Raw data points as stored
-- `ReaderType.INT` - Interpolated values at intervals
+Data retrieval modes:
+
+- `ReaderType.RAW` - Raw data points as stored in historian
+- `ReaderType.INT` - Interpolated values at specified intervals (default)
 - `ReaderType.SNAPSHOT` - Current snapshot of tag values
-- `ReaderType.AVG` - Average values over intervals
+- `ReaderType.AVG` - Average values over specified intervals
+
+#### IncludeFields
+
+Controls which optional fields to include in responses:
+
+- `IncludeFields.NONE` - Include only timestamp and value (default)
+- `IncludeFields.STATUS` - Include status/quality codes
+- `IncludeFields.DESCRIPTION` - Include tag descriptions
+- `IncludeFields.ALL` - Include both status and description
+
+#### OutputFormat
+
+Controls output format:
+
+- `OutputFormat.JSON` - Return as list of dictionaries (default)
+- `OutputFormat.DATAFRAME` - Return as pandas DataFrame
+
+**Example**:
+```python
+from aspy21 import AspenClient, IncludeFields, OutputFormat, ReaderType
+
+# Use all three enums together
+df = client.read(
+    ["TAG1", "TAG2"],
+    start="2025-01-01 00:00:00",
+    end="2025-01-01 01:00:00",
+    read_type=ReaderType.AVG,
+    include=IncludeFields.ALL,
+    output=OutputFormat.DATAFRAME
+)
+```
 
 ---
 
@@ -234,7 +342,7 @@ The client automatically retries failed requests with exponential backoff:
 ## Error Handling
 
 ```python
-from aspy21 import AspenClient
+from aspy21 import AspenClient, OutputFormat
 import httpx
 
 try:
@@ -243,10 +351,10 @@ try:
         auth=("user", "password")
     ) as client:
         df = client.read(
-            tags=["ATI111"],
+            ["ATI111"],
             start="2025-06-20 08:00:00",
             end="2025-06-20 09:00:00",
-            as_df=True,
+            output=OutputFormat.DATAFRAME,
         )
 except httpx.HTTPStatusError as e:
     print(f"HTTP error: {e.response.status_code}")

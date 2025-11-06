@@ -134,7 +134,9 @@ try:
         print("Searching for all G* tags with V1-01 in description...")
 
         # Search broadly and get descriptions
-        all_tags_result = client.search("G*", description="V1-01", limit=20, include=IncludeFields.DESCRIPTION)
+        all_tags_result = client.search(
+            "G*", description="V1-01", limit=20, include=IncludeFields.DESCRIPTION
+        )
         # Type narrowing: include=DESCRIPTION guarantees list[dict[str, str]]
         assert isinstance(all_tags_result, list) and (
             not all_tags_result or isinstance(all_tags_result[0], dict)
