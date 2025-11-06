@@ -478,11 +478,10 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
         end_dt = pd.to_datetime(end)
         period_seconds = int((end_dt - start_dt).total_seconds())
 
-        # Convert to HH:MM:SS format
+        # Convert to HH:MM format (as expected by Aspen aggregates table)
         hours = period_seconds // 3600
         minutes = (period_seconds % 3600) // 60
-        seconds = period_seconds % 60
-        period_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        period_str = f"{hours:02d}:{minutes:02d}"
 
         # Map ReaderType to SQL column name
         agg_column_map = {
