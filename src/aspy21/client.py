@@ -233,13 +233,18 @@ class AspenClient:
 
         # Auto-detect SNAPSHOT reads when start/end not provided
         effective_read_type = read_type
-        if start is None or end is None:
+        if start is None and end is None:
             if effective_read_type != ReaderType.SNAPSHOT:
                 logger.info(
                     "No start/end provided; defaulting to SNAPSHOT read for %d tag(s)",
                     len(tags),
                 )
             effective_read_type = ReaderType.SNAPSHOT
+        elif start is not None and end is None:
+            # If start provided but end omitted, use current time
+            from datetime import datetime
+            end = datetime.now().isoformat()
+            logger.debug(f"End time not provided, using current time: {end}")
 
         logger.debug(f"Tags: {tags}")
         logger.debug(f"Reader type: {effective_read_type.value}, Interval: {interval}")
@@ -547,15 +552,11 @@ class AspenClient:
                     # Check if tags key exists
                     if "tags" not in data_obj:
                         logger.warning("No 'tags' key in response - search returned no results")
-                        return []
-
-                    tags_data = data_obj["tags"]
+                        tags_data = []
+                    else:
+                        tags_data = data_obj["tags"]
                 else:
                     logger.error(f"Unexpected response structure: {data}")
-                    return []
-
-                if not tags_data:
-                    logger.info("Search returned 0 tags")
                     return []
 
                 for tag_entry in tags_data:

@@ -978,6 +978,300 @@ def test_search_requires_datasource():
     c.close()
 
 
+
+
+def test_search_hybrid_mode_dataframe(mock_api):
+    """Test hybrid search mode: search + read returning DataFrame."""
+    # Mock Browse endpoint for search
+    mock_api.get("https://aspen.local/ProcessData/AtProcessDataREST.dll/Browse").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": {
+                    "tags": [
+                        {"t": "TEMP_101", "n": "Reactor temperature"},
+                        {"t": "TEMP_102", "n": "Feed temperature"},
+                    ]
+                }
+            },
+        )
+    )
+
+    # Mock SQL endpoint for reading data (correct format)
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"ts": "2025-01-01T00:00:00Z", "name": "TEMP_101", "value": 25.5},
+                {"ts": "2025-01-01T01:00:00Z", "name": "TEMP_101", "value": 26.0},
+                {"ts": "2025-01-01T00:00:00Z", "name": "TEMP_102", "value": 30.0},
+                {"ts": "2025-01-01T01:00:00Z", "name": "TEMP_102", "value": 30.5},
+            ],
+        )
+    )
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+        datasource="IP21",
+    )
+
+    # Hybrid mode: search for tags AND read their data
+    result = c.search(
+        "TEMP*",
+        start="2025-01-01 00:00:00",
+        end="2025-01-01 01:00:00",
+        read_type=ReaderType.RAW,
+        output=OutputFormat.DATAFRAME,
+    )
+
+    # Should return DataFrame with data for found tags
+    assert isinstance(result, pd.DataFrame)
+    df = cast(pd.DataFrame, result)
+    assert "TEMP_101" in df.columns
+    assert "TEMP_102" in df.columns
+    assert len(df) == 2
+    c.close()
+
+
+def test_search_hybrid_mode_json(mock_api):
+    """Test hybrid search mode: search + read returning JSON."""
+    # Mock Browse endpoint for search
+    mock_api.get("https://aspen.local/ProcessData/AtProcessDataREST.dll/Browse").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": {
+                    "tags": [
+                        {"t": "TEMP_101", "n": "Reactor temperature"},
+                    ]
+                }
+            },
+        )
+    )
+
+    # Mock SQL endpoint for reading data
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"ts": "2025-01-01T00:00:00Z", "name": "TEMP_101", "value": 25.5},
+            ],
+        )
+    )
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+        datasource="IP21",
+    )
+
+    # Hybrid mode with JSON output (default)
+    result = c.search(
+        "TEMP*",
+        start="2025-01-01 00:00:00",
+        end="2025-01-01 01:00:00",
+        read_type=ReaderType.RAW,
+    )
+
+    # Should return list of dicts
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0]["tag"] == "TEMP_101"
+    assert result[0]["value"] == 25.5
+    assert "timestamp" in result[0]
+    c.close()
+
+
+def test_search_hybrid_mode_with_description_filter(mock_api):
+    """Test hybrid mode with description-based search (SQL endpoint)."""
+    # Mock SQL endpoint for description search
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").side_effect = [
+        # First call: search query
+        httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "g": "aspy21_search",
+                        "r": "D",
+                        "cols": [
+                            {"i": 0, "n": "name"},
+                            {"i": 1, "n": "d"},
+                        ],
+                        "rows": [
+                            {
+                                "fld": [
+                                    {"i": 0, "v": "REACTOR_TEMP"},
+                                    {"i": 1, "v": "Main reactor temperature"},
+                                ]
+                            }
+                        ],
+                    }
+                ]
+            },
+        ),
+        # Second call: read query
+        httpx.Response(
+            200,
+            json=[
+                {"ts": "2025-01-01T00:00:00Z", "name": "REACTOR_TEMP", "value": 125.5},
+            ],
+        ),
+    ]
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+        datasource="IP21",
+    )
+
+    # Hybrid mode with description filter
+    result = c.search(
+        description="reactor",
+        start="2025-01-01 00:00:00",
+        end="2025-01-01 01:00:00",
+        output=OutputFormat.DATAFRAME,
+    )
+
+    assert isinstance(result, pd.DataFrame)
+    df = cast(pd.DataFrame, result)
+    assert "REACTOR_TEMP" in df.columns
+    c.close()
+
+
+def test_search_hybrid_mode_empty_results(mock_api):
+    """Test hybrid mode when search returns no tags."""
+    # Mock Browse endpoint returning no tags
+    mock_api.get("https://aspen.local/ProcessData/AtProcessDataREST.dll/Browse").mock(
+        return_value=httpx.Response(
+            200,
+            json={"data": {"tags": []}},
+        )
+    )
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+        datasource="IP21",
+    )
+
+    # Hybrid mode with no matching tags - should return empty DataFrame
+    result = c.search(
+        "NONEXISTENT*",
+        start="2025-01-01 00:00:00",
+        output=OutputFormat.DATAFRAME,
+    )
+
+    assert isinstance(result, pd.DataFrame)
+    assert len(result) == 0
+
+    # Same for JSON output
+    result_json = c.search(
+        "NONEXISTENT*",
+        start="2025-01-01 00:00:00",
+        output=OutputFormat.JSON,
+    )
+
+    assert isinstance(result_json, list)
+    assert len(result_json) == 0
+    c.close()
+
+
+def test_search_hybrid_mode_with_include_all(mock_api):
+    """Test hybrid mode with include=ALL (status + description)."""
+    # Mock Browse endpoint
+    mock_api.get("https://aspen.local/ProcessData/AtProcessDataREST.dll/Browse").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": {
+                    "tags": [
+                        {"t": "TAG1", "n": "Tag description"},
+                    ]
+                }
+            },
+        )
+    )
+
+    # Mock SQL endpoint with status and description
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "ts": "2025-01-01T00:00:00Z",
+                    "name": "TAG1",
+                    "name->ip_description": "Tag description",
+                    "value": 100.0,
+                    "status": 8,
+                }
+            ],
+        )
+    )
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+        datasource="IP21",
+    )
+
+    # Hybrid mode with include=ALL
+    result = c.search(
+        "TAG*",
+        start="2025-01-01 00:00:00",
+        include=IncludeFields.ALL,
+        output=OutputFormat.JSON,
+    )
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    # Should include description and status
+    assert "description" in result[0]
+    assert "status" in result[0]
+    assert result[0]["tag"] == "TAG1"
+    c.close()
+
+
+def test_search_only_mode_vs_hybrid_mode(mock_api):
+    """Test that search behaves differently in search-only vs hybrid mode."""
+    # Mock Browse endpoint
+    mock_api.get("https://aspen.local/ProcessData/AtProcessDataREST.dll/Browse").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": {
+                    "tags": [
+                        {"t": "TAG1", "n": "Description 1"},
+                        {"t": "TAG2", "n": "Description 2"},
+                    ]
+                }
+            },
+        )
+    )
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+        datasource="IP21",
+    )
+
+    # Search-only mode (no start) - returns list of tag names
+    result_search_only = c.search("TAG*")
+
+    assert isinstance(result_search_only, list)
+    assert len(result_search_only) == 2
+    # Default include=NONE returns strings
+    assert isinstance(result_search_only[0], str)
+    assert result_search_only[0] == "TAG1"
+
+    c.close()
 def test_context_manager_basic(mock_api):
     """Test context manager enters and exits properly."""
     mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
