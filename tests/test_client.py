@@ -1585,3 +1585,207 @@ def test_read_as_df_without_description(mock_api):
         assert "description" in data[0]
         assert data[0]["description"] == ""
         assert data[0]["value"] == 25.5
+
+
+def test_aggregates_min_read(mock_api):
+    """Test AGG_MIN read type."""
+    # Mock SQL endpoint for aggregates query
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"ts": "2025-01-01T00:00:00Z", "name": "TAG1", "min": 10.5},
+            ],
+        )
+    )
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+        datasource="IP21",
+    )
+
+    result = c.read(
+        ["TAG1"],
+        start="2025-01-01 00:00:00",
+        end="2025-01-02 00:00:00",
+        read_type=ReaderType.AGG_MIN,
+        output=OutputFormat.JSON,
+    )
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0]["tag"] == "TAG1"
+    assert result[0]["value"] == 10.5
+    c.close()
+
+
+def test_aggregates_max_read(mock_api):
+    """Test AGG_MAX read type."""
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"ts": "2025-01-01T00:00:00Z", "name": "TAG1", "max": 99.5},
+            ],
+        )
+    )
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+        datasource="IP21",
+    )
+
+    result = c.read(
+        ["TAG1"],
+        start="2025-01-01 00:00:00",
+        end="2025-01-02 00:00:00",
+        read_type=ReaderType.AGG_MAX,
+        output=OutputFormat.DATAFRAME,
+    )
+
+    assert isinstance(result, pd.DataFrame)
+    df = cast(pd.DataFrame, result)
+    assert "TAG1" in df.columns
+    assert df.loc[df.index[0], "TAG1"] == 99.5
+    c.close()
+
+
+def test_aggregates_avg_read(mock_api):
+    """Test AGG_AVG read type."""
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"ts": "2025-01-01T00:00:00Z", "name": "TAG1", "avg": 55.0},
+            ],
+        )
+    )
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+        datasource="IP21",
+    )
+
+    result = c.read(
+        ["TAG1"],
+        start="2025-01-01 00:00:00",
+        end="2025-01-02 00:00:00",
+        read_type=ReaderType.AGG_AVG,
+        output=OutputFormat.JSON,
+    )
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0]["value"] == 55.0
+    c.close()
+
+
+def test_aggregates_rng_read(mock_api):
+    """Test AGG_RNG (range) read type."""
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"ts": "2025-01-01T00:00:00Z", "name": "TAG1", "rng": 89.0},
+            ],
+        )
+    )
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+        datasource="IP21",
+    )
+
+    result = c.read(
+        ["TAG1"],
+        start="2025-01-01 00:00:00",
+        end="2025-01-02 00:00:00",
+        read_type=ReaderType.AGG_RNG,
+        output=OutputFormat.JSON,
+    )
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0]["value"] == 89.0
+    c.close()
+
+
+def test_aggregates_multiple_tags(mock_api):
+    """Test aggregates with multiple tags."""
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"ts": "2025-01-01T00:00:00Z", "name": "TAG1", "min": 10.5},
+                {"ts": "2025-01-01T00:00:00Z", "name": "TAG2", "min": 20.5},
+            ],
+        )
+    )
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+        datasource="IP21",
+    )
+
+    result = c.read(
+        ["TAG1", "TAG2"],
+        start="2025-01-01 00:00:00",
+        end="2025-01-02 00:00:00",
+        read_type=ReaderType.AGG_MIN,
+        output=OutputFormat.DATAFRAME,
+    )
+
+    assert isinstance(result, pd.DataFrame)
+    df = cast(pd.DataFrame, result)
+    assert "TAG1" in df.columns
+    assert "TAG2" in df.columns
+    c.close()
+
+
+def test_aggregates_with_description(mock_api):
+    """Test aggregates with description field."""
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "ts": "2025-01-01T00:00:00Z",
+                    "name": "TAG1",
+                    "name->ip_description": "Test Tag Description",
+                    "avg": 42.0,
+                },
+            ],
+        )
+    )
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+        datasource="IP21",
+    )
+
+    result = c.read(
+        ["TAG1"],
+        start="2025-01-01 00:00:00",
+        end="2025-01-02 00:00:00",
+        read_type=ReaderType.AGG_AVG,
+        include=IncludeFields.DESCRIPTION,
+        output=OutputFormat.JSON,
+    )
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0]["description"] == "Test Tag Description"
+    assert result[0]["value"] == 42.0
+    c.close()

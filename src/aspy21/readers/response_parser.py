@@ -272,3 +272,82 @@ class XmlHistoryResponseParser(ResponseParser):
             logger.error(f"Error parsing response for tag {tag_name}: {e}")
             logger.debug(f"Response was: {response}")
             return pd.DataFrame(), ""
+
+
+class SqlAggregatesResponseParser(ResponseParser):
+    """Parser for SQL aggregates table responses.
+
+    Parses SQL aggregates responses containing min, max, avg, or rng values.
+    """
+
+    def parse(
+        self,
+        response: list[dict],
+        tag_names: list[str],
+        value_column: str,  # "min", "max", "avg", or "rng"
+        max_rows: int,
+    ) -> tuple[list[pd.DataFrame], dict[str, str]]:
+        """Parse SQL aggregates response.
+
+        Args:
+            response: SQL query response as list of records
+            tag_names: List of tag names to extract
+            value_column: Name of the value column (min, max, avg, or rng)
+            max_rows: Maximum rows per tag (0 = unlimited)
+
+        Returns:
+            Tuple of (list of DataFrames, dict of tag descriptions)
+        """
+        from collections import defaultdict
+
+        try:
+            if not response:
+                logger.warning("No data in SQL aggregates response")
+                return [], {}
+
+            # Group records by tag name
+            tag_records: dict[str, list[dict]] = defaultdict(list)
+            tag_descriptions: dict[str, str] = {}
+
+            for record in response:
+                tag_name = record.get("name")
+                if not tag_name:
+                    continue
+
+                tag_records[tag_name].append(record)
+
+                # Extract description from first record of each tag
+                if tag_name not in tag_descriptions and "name->ip_description" in record:
+                    tag_descriptions[tag_name] = record["name->ip_description"] or ""
+
+            # Build DataFrame for each tag
+            frames = []
+            for tag_name in tag_names:
+                records = tag_records.get(tag_name, [])
+
+                if not records:
+                    logger.warning(f"No data in SQL aggregates response for tag {tag_name}")
+                    continue
+
+                # Build DataFrame from records
+                rows = []
+                for record in records:
+                    timestamp = pd.to_datetime(record["ts"])
+                    value = record[value_column]  # Use the specified column name
+                    row = {"time": timestamp, tag_name: value}
+                    rows.append(row)
+
+                if rows:
+                    df = pd.DataFrame(rows)
+                    df = df.set_index("time")
+                    if max_rows > 0:
+                        df = df.iloc[:max_rows]
+                    frames.append(df)
+                    logger.debug(f"Parsed {len(df)} aggregate records for tag {tag_name}")
+
+            return frames, tag_descriptions
+
+        except Exception as e:
+            logger.error(f"Error parsing SQL aggregates response: {e}")
+            logger.debug(f"Response was: {response}")
+            return [], {}
