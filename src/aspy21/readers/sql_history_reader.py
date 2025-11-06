@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from ..query_builder import build_history_sql_query
+from ..query_builder import SqlHistoryQueryBuilder
 from .base_reader import BaseReader
 from .response_parser import SqlHistoryResponseParser
 
@@ -73,7 +73,8 @@ class SqlHistoryReader(BaseReader):
         assert start is not None
         assert end is not None
 
-        xml_query = build_history_sql_query(
+        builder = SqlHistoryQueryBuilder()
+        xml_query = builder.build(
             tags=tags,  # Pass all tags for batched query
             start=start,
             end=end,

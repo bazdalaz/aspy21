@@ -1,7 +1,7 @@
-"""XML query generation for Aspen InfoPlus.21 REST API.
+"""SQL query generation for Aspen InfoPlus.21 REST API.
 
 This module implements the Strategy Pattern for generating different query types.
-Each builder handles a specific query format (XML endpoint, SQL history, SQL snapshot, SQL search).
+Each builder handles a specific query format (SQL history, snapshot, search, aggregates).
 """
 
 from __future__ import annotations
@@ -25,80 +25,6 @@ class QueryBuilder(ABC):  # noqa: B024
     """
 
     pass
-
-
-class XmlQueryBuilder(QueryBuilder):
-    """Query builder for XML endpoint (per-tag historical queries)."""
-
-    def build(
-        self,
-        tag: str,
-        start: str,
-        end: str,
-        read_type: ReaderType,
-        interval: int | None = None,
-        datasource: str = "",
-        max_rows: int = 100000,
-        with_description: bool = False,
-    ) -> str:
-        """Generate XML query for Aspen REST API data read.
-
-        Args:
-            tag: Tag name
-            start: Start timestamp (ISO format)
-            end: End timestamp (ISO format)
-            read_type: Type of read (RAW, INT, etc.)
-            interval: Interval in seconds (for aggregated reads)
-            datasource: Data source name (default: IP21)
-            max_rows: Maximum number of rows to return
-            with_description: Include ip_description field in response
-
-        Returns:
-            XML query string
-        """
-        # Convert ISO timestamps to milliseconds since epoch
-        start_dt = pd.to_datetime(start)
-        end_dt = pd.to_datetime(end)
-        start_ms = int(start_dt.timestamp() * 1000)
-        end_ms = int(end_dt.timestamp() * 1000)
-
-        # Map ReaderType to Aspen RT codes
-        rt_map = {
-            ReaderType.RAW: 0,
-            ReaderType.INT: 1,
-            ReaderType.SNAPSHOT: 2,  # Will use Attribute endpoint
-            ReaderType.AVG: 10,
-        }
-        rt_code = rt_map.get(read_type, 0)
-
-        # Build XML query
-        xml = '<Q f="d" allQuotes="1">'
-        xml += "<Tag>"
-        xml += f"<N><![CDATA[{tag}]]></N>"
-        # Only include datasource if specified
-        if datasource:
-            xml += f"<D><![CDATA[{datasource}]]></D>"
-        xml += "<F><![CDATA[VAL]]></F>"
-
-        # Add description field if requested
-        if with_description:
-            xml += "<F><![CDATA[IP_DESCRIPTION]]></F>"
-
-        xml += "<HF>0</HF>"  # History format: 0=Raw
-        xml += f"<St>{start_ms}</St>"
-        xml += f"<Et>{end_ms}</Et>"
-        xml += f"<RT>{rt_code}</RT>"
-        xml += f"<X>{max_rows}</X>"
-
-        # Add interval for aggregated reads
-        if interval and rt_code >= 10:
-            xml += f"<P>{interval}</P>"
-            xml += "<PU>3</PU>"  # Period unit: 3=seconds
-
-        xml += "</Tag>"
-        xml += "</Q>"
-
-        return xml
 
 
 class SqlHistoryQueryBuilder(QueryBuilder):
@@ -141,9 +67,9 @@ class SqlHistoryQueryBuilder(QueryBuilder):
         # Map ReaderType to Aspen request parameter
         request_map = {
             ReaderType.RAW: 4,  # Raw historical data
-            ReaderType.INT: 1,  # Interpolated data
+            ReaderType.INT: 5,  # Interpolated data with data point to current value
         }
-        request_value = request_map.get(read_type, 4)  # Default to RAW
+        request_value = request_map.get(read_type, ReaderType.INT)  # Default to INTERPOLATED
 
         # Build SELECT clause with optional fields
         select_fields = ["ts", "name"]
@@ -183,14 +109,14 @@ class SqlHistoryQueryBuilder(QueryBuilder):
 
         where_clause = " and ".join(where_clauses)
 
-        # Build SQL query - use history(80) for Aspen SQL
+        # Build SQL query - use history(80) for field length
         sql_query = f"Select {select_clause} from history(80) where {where_clause}"
 
         # Build XML request for SQL endpoint with response="Record" for clean JSON arrays
         xml = (
             f'<SQL g="aspy21_history" t="SQLplus" ds="{datasource}" '
             f'dso="CHARINT=N;CHARFLOAT=N;CHARTIME=N;CONVERTERRORS=N" '
-            f'm="{max_rows}" to="30" response="Record" s="1">'
+            f'm="{max_rows}" to="30   " response="Record" s="1">'  # s=1 for Select
             f"<![CDATA[{sql_query}]]>"
             f"</SQL>"
         )
@@ -300,147 +226,6 @@ class SqlSearchQueryBuilder(QueryBuilder):
         return xml
 
 
-# ============================================================================
-# Backward-compatible factory functions (maintain existing API)
-# ============================================================================
-
-
-def build_read_query(
-    tag: str,
-    start: str,
-    end: str,
-    read_type: ReaderType,
-    interval: int | None = None,
-    datasource: str = "",
-    max_rows: int = 100000,
-    with_description: bool = False,
-) -> str:
-    """Generate XML query for Aspen REST API data read.
-
-    This is a backward-compatible wrapper that uses XmlQueryBuilder internally.
-
-    Args:
-        tag: Tag name
-        start: Start timestamp (ISO format)
-        end: End timestamp (ISO format)
-        read_type: Type of read (RAW, INT, etc.)
-        interval: Interval in seconds (for aggregated reads)
-        datasource: Data source name (default: IP21)
-        max_rows: Maximum number of rows to return
-        with_description: Include ip_description field in response
-
-    Returns:
-        XML query string
-    """
-    builder = XmlQueryBuilder()
-    return builder.build(
-        tag=tag,
-        start=start,
-        end=end,
-        read_type=read_type,
-        interval=interval,
-        datasource=datasource,
-        max_rows=max_rows,
-        with_description=with_description,
-    )
-
-
-def build_history_sql_query(
-    tags: list[str] | str,
-    start: str,
-    end: str,
-    datasource: str,
-    read_type: ReaderType,
-    interval: int | None = None,
-    max_rows: int = 100000,
-    with_description: bool = False,
-    include_status: bool = False,
-) -> str:
-    """Generate SQL query for historical data read.
-
-    This is a backward-compatible wrapper that uses SqlHistoryQueryBuilder internally.
-
-    Args:
-        tags: Tag name(s) - single tag string or list of tags for batched query
-        start: Start timestamp (ISO format)
-        end: End timestamp (ISO format)
-        datasource: Aspen datasource name
-        read_type: Type of read (RAW or INT)
-        interval: Sampling interval in seconds (converted to period in tenths of seconds)
-        max_rows: Maximum number of rows to return
-        with_description: Include ip_description field in response
-        include_status: Include status field in response
-
-    Returns:
-        XML query string for SQL endpoint
-    """
-    builder = SqlHistoryQueryBuilder()
-    return builder.build(
-        tags=tags,
-        start=start,
-        end=end,
-        datasource=datasource,
-        read_type=read_type,
-        interval=interval,
-        max_rows=max_rows,
-        with_description=with_description,
-        include_status=include_status,
-    )
-
-
-def build_snapshot_sql_query(
-    tags: list[str] | str,
-    datasource: str,
-    with_description: bool = False,
-) -> str:
-    """Generate SQL query for current snapshot values.
-
-    This is a backward-compatible wrapper that uses SqlSnapshotQueryBuilder internally.
-
-    Args:
-        tags: One or more tag names to fetch.
-        datasource: Aspen datasource name.
-        with_description: Include ip_description field in response.
-
-    Returns:
-        XML query string for SQL snapshot endpoint.
-    """
-    builder = SqlSnapshotQueryBuilder()
-    return builder.build(
-        tags=tags,
-        datasource=datasource,
-        with_description=with_description,
-    )
-
-
-def build_sql_search_query(
-    datasource: str,
-    description: str,
-    tag_pattern: str = "*",
-    max_results: int = 10000,
-) -> str:
-    """Generate XML query for SQL-based tag search.
-
-    This is a backward-compatible wrapper that uses SqlSearchQueryBuilder internally.
-
-    Args:
-        datasource: Aspen datasource name
-        description: Description pattern to search for (supports * wildcards)
-        tag_pattern: Tag name pattern (supports * and ? wildcards)
-        max_results: Maximum number of results
-
-    Returns:
-        XML query string for SQL endpoint
-    """
-    builder = SqlSearchQueryBuilder()
-    return builder.build(
-        datasource=datasource,
-        description=description,
-        tag_pattern=tag_pattern,
-        max_results=max_results,
-    )
-
-
 class SqlAggregatesQueryBuilder(QueryBuilder):
     """Query builder for SQL aggregates table queries."""
 
@@ -461,7 +246,7 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
             start: Start timestamp (ISO format)
             end: End timestamp (ISO format)
             datasource: Aspen datasource name
-            read_type: Type of aggregation (AGG_MIN, AGG_MAX, AGG_AVG, AGG_RNG)
+            read_type: Type of aggregation (MIN, MAX, AVG, RNG)
             with_description: Include ip_description field in response
             include_status: Include status field in response (not supported for aggregates)
 
@@ -486,10 +271,10 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
 
         # Map ReaderType to SQL column name
         agg_column_map = {
-            ReaderType.AGG_MIN: "min",
-            ReaderType.AGG_MAX: "max",
-            ReaderType.AGG_AVG: "avg",
-            ReaderType.AGG_RNG: "rng",
+            ReaderType.MIN: "min",
+            ReaderType.MAX: "max",
+            ReaderType.AVG: "avg",
+            ReaderType.RNG: "rng",
         }
 
         column_name = agg_column_map.get(read_type)
@@ -524,38 +309,3 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
         ET.SubElement(root, "Datasource").text = datasource
 
         return ET.tostring(root, encoding="unicode")
-
-
-def build_aggregates_sql_query(
-    tags: list[str] | str,
-    start: str,
-    end: str,
-    datasource: str,
-    read_type: ReaderType,
-    with_description: bool = False,
-    include_status: bool = False,
-) -> str:
-    """Generate SQL query for aggregates table.
-
-    Args:
-        tags: Tag name(s) - single tag string or list of tags
-        start: Start timestamp (ISO format)
-        end: End timestamp (ISO format)
-        datasource: Aspen datasource name
-        read_type: Type of aggregation (AGG_MIN, AGG_MAX, AGG_AVG, AGG_RNG)
-        with_description: Include ip_description field in response
-        include_status: Include status field in response (not supported for aggregates)
-
-    Returns:
-        XML query string for SQL endpoint
-    """
-    builder = SqlAggregatesQueryBuilder()
-    return builder.build(
-        tags=tags,
-        start=start,
-        end=end,
-        datasource=datasource,
-        read_type=read_type,
-        with_description=with_description,
-        include_status=include_status,
-    )
