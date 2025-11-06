@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 from typing import TYPE_CHECKING
 
 import pandas as pd
 
 from ..query_builder import build_history_sql_query
 from .base_reader import BaseReader
+from .response_parser import SqlHistoryResponseParser
 
 if TYPE_CHECKING:
+    import httpx
+
     from ..models import ReaderType
 
 logger = logging.getLogger(__name__)
@@ -19,6 +21,17 @@ logger = logging.getLogger(__name__)
 
 class SqlHistoryReader(BaseReader):
     """Reader for historical data using SQL endpoint (batches multiple tags)."""
+
+    def __init__(self, base_url: str, datasource: str, http_client: httpx.Client):
+        """Initialize SQL history reader with response parser.
+
+        Args:
+            base_url: Base URL for the API
+            datasource: Datasource name
+            http_client: HTTP client for making requests
+        """
+        super().__init__(base_url, datasource, http_client)
+        self.parser = SqlHistoryResponseParser()
 
     def can_handle(
         self,
@@ -32,7 +45,7 @@ class SqlHistoryReader(BaseReader):
         # Handle RAW/INT reads with datasource configured
         return bool(
             read_type in (RT.RAW, RT.INT)
-            and self.datasource
+            and bool(self.datasource)
             and start is not None
             and end is not None
         )
@@ -110,7 +123,7 @@ class SqlHistoryReader(BaseReader):
         logger.debug(f"SQL response length: {response_length}")
 
         # Parse multi-tag SQL response (response="Record" returns clean JSON array)
-        frames, tag_descriptions = self._parse_multi_tag_sql_response(
+        frames, tag_descriptions = self.parser.parse(
             sql_response,
             tags,
             include_status=include_status,
@@ -119,70 +132,3 @@ class SqlHistoryReader(BaseReader):
         logger.debug(f"Parsed data for {len(frames)} tag(s)")
 
         return frames, tag_descriptions
-
-    def _parse_multi_tag_sql_response(
-        self,
-        response: list[dict],
-        tag_names: list[str],
-        include_status: bool,
-        max_rows: int,
-    ) -> tuple[list[pd.DataFrame], dict[str, str]]:
-        """Parse SQL history response for multiple tags into separate DataFrames."""
-        try:
-            if not response or not isinstance(response, list):
-                logger.warning("No data in SQL response")
-                return [], {}
-
-            # Group records by tag name
-            tag_records = defaultdict(list)
-            tag_descriptions = {}
-
-            for record in response:
-                tag_name = record.get("name")
-                if not tag_name:
-                    continue
-
-                tag_records[tag_name].append(record)
-
-                # Extract description from first record of each tag
-                if tag_name not in tag_descriptions and "name->ip_description" in record:
-                    tag_descriptions[tag_name] = record["name->ip_description"] or ""
-
-            # Build DataFrame for each tag
-            frames = []
-            for tag_name in tag_names:
-                records = tag_records.get(tag_name, [])
-
-                if not records:
-                    logger.warning(f"No data in SQL response for tag {tag_name}")
-                    continue
-
-                # Build DataFrame from records
-                rows = []
-                for record in records:
-                    timestamp = pd.to_datetime(record["ts"])
-                    value = record["value"]
-                    row = {"time": timestamp, tag_name: value}
-
-                    # Include status if present in response
-                    if include_status and "status" in record:
-                        row["status"] = record["status"]
-
-                    rows.append(row)
-
-                if rows:
-                    df = pd.DataFrame(rows)
-                    df = df.set_index("time")
-                    if max_rows > 0:
-                        df = df.iloc[:max_rows]
-                    if include_status and "status" in df.columns:
-                        df = df.rename(columns={"status": f"{tag_name}_status"})
-                    frames.append(df)
-                    logger.debug(f"Parsed {len(df)} data points for tag {tag_name}")
-
-            return frames, tag_descriptions
-
-        except Exception as e:
-            logger.error(f"Error parsing multi-tag SQL response: {e}")
-            logger.debug(f"Response was: {response}")
-            return [], {}

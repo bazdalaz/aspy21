@@ -10,8 +10,11 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from ..query_builder import build_read_query
 from .base_reader import BaseReader
+from .response_parser import XmlHistoryResponseParser
 
 if TYPE_CHECKING:
+    import httpx
+
     from ..models import ReaderType
 
 logger = logging.getLogger(__name__)
@@ -19,6 +22,17 @@ logger = logging.getLogger(__name__)
 
 class XmlHistoryReader(BaseReader):
     """Reader for historical data using XML endpoint (loops over tags)."""
+
+    def __init__(self, base_url: str, datasource: str, http_client: httpx.Client):
+        """Initialize XML history reader with response parser.
+
+        Args:
+            base_url: Base URL for the API
+            datasource: Datasource name
+            http_client: HTTP client for making requests
+        """
+        super().__init__(base_url, datasource, http_client)
+        self.parser = XmlHistoryResponseParser()
 
     def can_handle(
         self,
@@ -75,7 +89,7 @@ class XmlHistoryReader(BaseReader):
             logger.debug(f"Received response for tag: {tag}")
 
             # Parse the Aspen-style response
-            df, description = self._parse_aspen_response(
+            df, description = self.parser.parse(
                 response,
                 tag,
                 include_status=include_status,
@@ -125,71 +139,3 @@ class XmlHistoryReader(BaseReader):
             else:
                 logger.error(f"Unexpected error: {type(e).__name__}: {e}")
             raise
-
-    def _parse_aspen_response(
-        self, response: dict, tag_name: str, include_status: bool, max_rows: int
-    ) -> tuple[pd.DataFrame, str]:
-        """Parse Aspen REST API response into DataFrame."""
-        try:
-            # Get data array
-            data = response.get("data", [])
-            if not data or not isinstance(data, list):
-                logger.warning(f"No data array in response for tag {tag_name}")
-                return pd.DataFrame(), ""
-
-            # Get first element (should contain samples)
-            tag_data = data[0] if len(data) > 0 else {}
-
-            # Extract description if available (from IP_DESCRIPTION field)
-            description = ""
-            if "l" in tag_data and isinstance(tag_data["l"], list) and len(tag_data["l"]) > 0:
-                # "l" contains list of field values, IP_DESCRIPTION is second field if requested
-                fields = tag_data["l"]
-                if len(fields) > 1:
-                    description = fields[1] if fields[1] is not None else ""
-
-            # Check for errors in samples
-            samples = tag_data.get("samples", [])
-            if samples and isinstance(samples, list) and len(samples) > 0:
-                first_sample = samples[0]
-                # Check if first sample contains an error
-                if "er" in first_sample and first_sample.get("er", 0) != 0:
-                    error_msg = first_sample.get("es", "Unknown error")
-                    logger.warning(f"API error for tag {tag_name}: {error_msg}")
-                    return pd.DataFrame(), description
-
-            if not samples:
-                logger.warning(f"No samples found for tag {tag_name}")
-                return pd.DataFrame(), description
-
-            # Build DataFrame
-            rows = []
-            for sample in samples:
-                # Skip error samples
-                if "er" in sample:
-                    continue
-
-                row = {
-                    "time": pd.to_datetime(sample["t"], unit="ms", utc=True).tz_convert(None),
-                    tag_name: sample.get("v"),
-                }
-                if include_status:
-                    row[f"{tag_name}_status"] = sample.get("s", 0)
-                rows.append(row)
-
-            if not rows:
-                logger.warning(f"No valid data samples for tag {tag_name}")
-                return pd.DataFrame(), description
-
-            df = pd.DataFrame(rows)
-            if not df.empty:
-                df = df.set_index("time")
-                if max_rows > 0:
-                    df = df.iloc[:max_rows]
-
-            return df, description
-
-        except Exception as e:
-            logger.error(f"Error parsing response for tag {tag_name}: {e}")
-            logger.debug(f"Response was: {response}")
-            return pd.DataFrame(), ""
