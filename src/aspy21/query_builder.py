@@ -469,7 +469,6 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
             XML query string for SQL endpoint
         """
         import xml.etree.ElementTree as ET
-        from datetime import datetime
 
         # Convert tags to list if string
         tags_list = [tags] if isinstance(tags, str) else tags
