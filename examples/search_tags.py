@@ -5,7 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from aspy21 import AspenClient, configure_logging
+from aspy21 import AspenClient, IncludeFields, configure_logging
 
 # Load .env from project root
 env_path = Path(__file__).parent.parent / ".env"
@@ -47,8 +47,8 @@ try:
         # Example 1: Search by tag name pattern with wildcards
         print("Example 1: Search all tags starting with 'TEMP'")
         print("-" * 80)
-        tags_raw = client.search(tag="TEMP*", max_results=10)
-        # Type narrowing: return_desc=True (default) guarantees list[dict[str, str]]
+        tags_raw = client.search("TEMP*", limit=10, include=IncludeFields.DESCRIPTION)
+        # Type narrowing: include=DESCRIPTION guarantees list[dict[str, str]]
         assert isinstance(tags_raw, list) and (not tags_raw or isinstance(tags_raw[0], dict))
         tags: list[dict[str, str]] = tags_raw  # type: ignore[assignment]
         print(f"Found {len(tags)} tags:\n")
@@ -59,8 +59,8 @@ try:
         # Example 2: Search by description only (uses SQL endpoint)
         print("Example 2: Search all tags with description containing 'V1-01'")
         print("-" * 80)
-        tags_raw = client.search(description="V1-01", max_results=10)
-        # Type narrowing: return_desc=True (default) guarantees list[dict[str, str]]
+        tags_raw = client.search(description="V1-01", limit=10, include=IncludeFields.DESCRIPTION)
+        # Type narrowing: include=DESCRIPTION guarantees list[dict[str, str]]
         assert isinstance(tags_raw, list) and (not tags_raw or isinstance(tags_raw[0], dict))
         tags: list[dict[str, str]] = tags_raw  # type: ignore[assignment]
         print(f"Found {len(tags)} tags:\n")
@@ -71,8 +71,10 @@ try:
         # Example 3: Combine tag pattern and description
         print("Example 3: Search 'AI*' tags with 'temperature' in description")
         print("-" * 80)
-        tags_raw = client.search(tag="AI*", description="temperature", max_results=10)
-        # Type narrowing: return_desc=True (default) guarantees list[dict[str, str]]
+        tags_raw = client.search(
+            "AI*", description="temperature", limit=10, include=IncludeFields.DESCRIPTION
+        )
+        # Type narrowing: include=DESCRIPTION guarantees list[dict[str, str]]
         assert isinstance(tags_raw, list) and (not tags_raw or isinstance(tags_raw[0], dict))
         tags: list[dict[str, str]] = tags_raw  # type: ignore[assignment]
         print(f"Found {len(tags)} tags:\n")
@@ -92,8 +94,8 @@ try:
         # Example 5: Case-insensitive search (default)
         print("Example 5: Case-insensitive search (lowercase query)")
         print("-" * 80)
-        tags_raw = client.search(tag="*", description="reactor", max_results=5)
-        # Type narrowing: return_desc=True (default) guarantees list[dict[str, str]]
+        tags_raw = client.search(description="reactor", limit=5, include=IncludeFields.DESCRIPTION)
+        # Type narrowing: include=DESCRIPTION guarantees list[dict[str, str]]
         assert isinstance(tags_raw, list) and (not tags_raw or isinstance(tags_raw[0], dict))
         tags: list[dict[str, str]] = tags_raw  # type: ignore[assignment]
         print(f"Found {len(tags)} tags (matches 'Reactor', 'REACTOR', etc.):\n")

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from aspy21 import AspenClient, ReaderType, configure_logging
+from aspy21 import AspenClient, OutputFormat, ReaderType, configure_logging
 
 # Load .env from project root
 env_path = Path(__file__).parent.parent / ".env"
@@ -62,10 +62,11 @@ try:
         verify_ssl=verify_ssl,
     ) as client:
         df = client.read(
-            tags=[test_tag],
+            [test_tag],
             start="2025-06-20T08:00:00",
             end="2025-06-20T09:00:00",
             read_type=ReaderType.RAW,
+            output=OutputFormat.JSON,
         )
 
         print("\n" + "=" * 80)

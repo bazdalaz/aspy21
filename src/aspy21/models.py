@@ -17,3 +17,31 @@ class ReaderType(str, Enum):
     INT = "INT"
     SNAPSHOT = "SNAPSHOT"
     AVG = "AVG"
+
+
+class IncludeFields(str, Enum):
+    """Field inclusion options for read/search operations.
+
+    Attributes:
+        NONE: Include only timestamp and value
+        STATUS: Include status field
+        DESCRIPTION: Include description field
+        ALL: Include both status and description fields
+    """
+
+    NONE = "NONE"
+    STATUS = "STATUS"
+    DESCRIPTION = "DESCRIPTION"
+    ALL = "ALL"
+
+
+class OutputFormat(str, Enum):
+    """Output format options for read/search operations.
+
+    Attributes:
+        JSON: Return data as list of dictionaries
+        DATAFRAME: Return data as pandas DataFrame
+    """
+
+    JSON = "JSON"
+    DATAFRAME = "DATAFRAME"

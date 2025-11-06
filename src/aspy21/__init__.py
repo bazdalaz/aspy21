@@ -6,7 +6,7 @@ with pandas DataFrame output and flexible batching.
 """
 
 from .client import AspenClient, configure_logging
-from .models import ReaderType
+from .models import IncludeFields, OutputFormat, ReaderType
 
 try:
     from ._version import __version__  # type: ignore[import-not-found]
@@ -14,4 +14,11 @@ except ImportError:
     # Development mode - no version file generated yet
     __version__ = "0.0.0.dev0"
 
-__all__ = ["AspenClient", "ReaderType", "configure_logging", "__version__"]
+__all__ = [
+    "AspenClient",
+    "ReaderType",
+    "IncludeFields",
+    "OutputFormat",
+    "configure_logging",
+    "__version__",
+]
