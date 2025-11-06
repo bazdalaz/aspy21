@@ -9,6 +9,7 @@ import pandas as pd
 
 from ..query_builder import build_snapshot_sql_query
 from .base_reader import BaseReader
+from .response_parser import SqlSnapshotResponseParser
 
 if TYPE_CHECKING:
     from ..models import ReaderType
@@ -18,6 +19,17 @@ logger = logging.getLogger(__name__)
 
 class SnapshotReader(BaseReader):
     """Reader for snapshot (current value) reads using SQL endpoint."""
+
+    def __init__(self, base_url: str, http_client, datasource: str | None = None):
+        """Initialize snapshot reader with response parser.
+
+        Args:
+            base_url: Base URL for the API
+            http_client: HTTP client for making requests
+            datasource: Optional datasource name
+        """
+        super().__init__(base_url, http_client, datasource)
+        self.parser = SqlSnapshotResponseParser()
 
     def can_handle(
         self,
@@ -82,7 +94,7 @@ class SnapshotReader(BaseReader):
             message = "Failed to parse JSON response from snapshot SQL endpoint"
             raise ValueError(message) from e
 
-        snapshot_frame, snapshot_descriptions = self._parse_snapshot_sql_response(
+        snapshot_frame, snapshot_descriptions = self.parser.parse(
             sql_response,
             tags,
             include_status=include_status,
@@ -94,54 +106,3 @@ class SnapshotReader(BaseReader):
             frames.append(snapshot_frame)
 
         return frames, snapshot_descriptions
-
-    def _parse_snapshot_sql_response(
-        self,
-        response: list[dict],
-        tag_names: list[str],
-        include_status: bool,
-        snapshot_time: pd.Timestamp,
-    ) -> tuple[pd.DataFrame, dict[str, str]]:
-        """Parse SQL snapshot response into DataFrame with descriptions/status."""
-        try:
-            if not response or not isinstance(response, list):
-                logger.warning("No data in snapshot SQL response")
-                return pd.DataFrame(), {}
-
-            values: dict[str, object] = {}
-            descriptions: dict[str, str] = {}
-            status_map: dict[str, object] = {}
-
-            for record in response:
-                tag_name = record.get("name")
-                if not tag_name or tag_name not in tag_names:
-                    continue
-
-                if "name->ip_input_value" in record:
-                    values[tag_name] = record.get("name->ip_input_value")
-
-                if "name->ip_description" in record and record["name->ip_description"] is not None:
-                    descriptions[tag_name] = record["name->ip_description"]
-
-                if include_status and "name->ip_input_quality" in record:
-                    status_map[tag_name] = record.get("name->ip_input_quality")
-
-            if not values:
-                logger.warning("Snapshot SQL response contained no values")
-                return pd.DataFrame(), descriptions
-
-            df = pd.DataFrame([values])
-            df.index = pd.DatetimeIndex([snapshot_time], name="time")
-
-            if include_status and status_map:
-                status_df = pd.DataFrame([status_map])
-                status_df.index = df.index
-                status_df.columns = [f"{col}_status" for col in status_df.columns]
-                df = pd.concat([df, status_df], axis=1)
-
-            return df, descriptions
-
-        except Exception as e:
-            logger.error(f"Error parsing snapshot SQL response: {e}")
-            logger.debug(f"Response was: {response}")
-            return pd.DataFrame(), {}
