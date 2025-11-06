@@ -978,8 +978,6 @@ def test_search_requires_datasource():
     c.close()
 
 
-
-
 def test_search_hybrid_mode_dataframe(mock_api):
     """Test hybrid search mode: search + read returning DataFrame."""
     # Mock Browse endpoint for search
@@ -1079,9 +1077,11 @@ def test_search_hybrid_mode_json(mock_api):
     # Should return list of dicts
     assert isinstance(result, list)
     assert len(result) == 1
-    assert result[0]["tag"] == "TEMP_101"
-    assert result[0]["value"] == 25.5
-    assert "timestamp" in result[0]
+    record = result[0]
+    assert isinstance(record, dict)
+    assert record["tag"] == "TEMP_101"
+    assert record["value"] == 25.5
+    assert "timestamp" in record
     c.close()
 
 
@@ -1232,9 +1232,11 @@ def test_search_hybrid_mode_with_include_all(mock_api):
     assert isinstance(result, list)
     assert len(result) == 1
     # Should include description and status
-    assert "description" in result[0]
-    assert "status" in result[0]
-    assert result[0]["tag"] == "TAG1"
+    record = result[0]
+    assert isinstance(record, dict)
+    assert "description" in record
+    assert "status" in record
+    assert record["tag"] == "TAG1"
     c.close()
 
 
@@ -1272,6 +1274,8 @@ def test_search_only_mode_vs_hybrid_mode(mock_api):
     assert result_search_only[0] == "TAG1"
 
     c.close()
+
+
 def test_context_manager_basic(mock_api):
     """Test context manager enters and exits properly."""
     mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
