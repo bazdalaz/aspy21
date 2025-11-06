@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import httpx
 import pandas as pd
 
-from .models import ReaderType
+from .models import IncludeFields, OutputFormat, ReaderType
 from .query_builder import build_sql_search_query
 
 if TYPE_CHECKING:
@@ -158,15 +158,15 @@ class AspenClient:
 
     def read(
         self,
-        tags: Iterable[str],
+        tags: list[str],
+        *,
         start: str | None = None,
         end: str | None = None,
         interval: int | None = None,
         read_type: ReaderType = ReaderType.INT,
-        include_status: bool = False,
-        max_rows: int = 100000,
-        as_df: bool = False,
-        with_description: bool = False,
+        include: IncludeFields = IncludeFields.NONE,
+        limit: int = 100_000,
+        output: OutputFormat = OutputFormat.JSON,
     ) -> pd.DataFrame | list[dict]:
         """Read process data for multiple tags.
 
@@ -178,20 +178,25 @@ class AspenClient:
                 SNAPSHOT read.
             interval: Optional interval in seconds for aggregated data (AVG reads)
             read_type: Type of data retrieval (RAW, INT, SNAPSHOT, AVG) (default: INT)
-            include_status: Include status column in output (default: False)
-            max_rows: Maximum number of rows to return per tag (default: 100000)
-            as_df: Return data as pandas DataFrame instead of JSON list (default: False)
-            with_description: Include tag descriptions in response (default: False).
-                             Note: Some Aspen servers may not support this field.
+            include: Field inclusion options (default: NONE)
+                - NONE: Include only timestamp and value
+                - STATUS: Include status field
+                - DESCRIPTION: Include description field
+                - ALL: Include both status and description
+            limit: Maximum number of rows to return per tag (default: 100000)
+            output: Output format (default: JSON)
+                - JSON: Return as list of dictionaries
+                - DATAFRAME: Return as pandas DataFrame
 
         Returns:
-            If as_df=True: pandas DataFrame with time index and columns for each tag.
-                           If include_status=True, includes a 'status' column.
-            If as_df=False: List of dictionaries, each containing:
-                            - timestamp: ISO format timestamp string
-                            - tag: Tag name
-                            - description: Tag description (when requested via with_description)
-                            - value: Tag value
+            If output=DATAFRAME: pandas DataFrame with time index and columns for each tag.
+                                 If include=STATUS or ALL, includes a 'status' column.
+            If output=JSON: List of dictionaries, each containing:
+                           - timestamp: ISO format timestamp string
+                           - tag: Tag name
+                           - description: Tag description (when include=DESCRIPTION or ALL)
+                           - value: Tag value
+                           - status: Status code (when include=STATUS or ALL)
 
         Example:
             >>> # JSON output (default)
@@ -202,24 +207,30 @@ class AspenClient:
             ...     end="2025-01-01 01:00:00"
             ... )
             >>> # Returns: [
-            >>> #   {"timestamp": "2025-01-01T00:00:00", "tag": "ATI111",
-            >>> #    "description": "Temperature sensor", "value": 25.5},
+            >>> #   {"timestamp": "2025-01-01T00:00:00", "tag": "ATI111", "value": 25.5},
             >>> #   ...
             >>> # ]
 
-            >>> # DataFrame output
+            >>> # DataFrame output with descriptions
             >>> df = client.read(
             ...     ["ATI111", "AP101.PV"],
             ...     start="2025-01-01 00:00:00",
             ...     end="2025-01-01 01:00:00",
-            ...     as_df=True
+            ...     output=OutputFormat.DATAFRAME,
+            ...     include=IncludeFields.DESCRIPTION
             ... )
         """
         from .readers import DataFormatter
 
-        tags_list = list(tags)
-        if not tags_list:
+        if not tags:
             raise ValueError("At least one tag is required")
+
+        # Convert include enum to boolean flags for internal use
+        include_status = include in (IncludeFields.STATUS, IncludeFields.ALL)
+        with_description = include in (IncludeFields.DESCRIPTION, IncludeFields.ALL)
+
+        # Convert output enum to boolean for internal use
+        as_df = output == OutputFormat.DATAFRAME
 
         # Auto-detect SNAPSHOT reads when start/end not provided
         effective_read_type = read_type
@@ -227,24 +238,24 @@ class AspenClient:
             if effective_read_type != ReaderType.SNAPSHOT:
                 logger.info(
                     "No start/end provided; defaulting to SNAPSHOT read for %d tag(s)",
-                    len(tags_list),
+                    len(tags),
                 )
             effective_read_type = ReaderType.SNAPSHOT
 
-        logger.debug(f"Tags: {tags_list}")
+        logger.debug(f"Tags: {tags}")
         logger.debug(f"Reader type: {effective_read_type.value}, Interval: {interval}")
 
         # Select appropriate reader strategy
         for reader in self._readers:
             if reader.can_handle(effective_read_type, start, end):
                 frames, tag_descriptions = reader.read(
-                    tags=tags_list,
+                    tags=tags,
                     start=start,
                     end=end,
                     interval=interval,
                     read_type=effective_read_type,
                     include_status=include_status,
-                    max_rows=max_rows,
+                    max_rows=limit,
                     with_description=with_description,
                 )
                 break
@@ -254,7 +265,7 @@ class AspenClient:
         # Format output using formatter
         return DataFormatter.format_output(
             frames=frames,
-            tags=tags_list,
+            tags=tags,
             tag_descriptions=tag_descriptions,
             as_df=as_df,
             include_status=include_status,
@@ -379,12 +390,27 @@ class AspenClient:
     def search(
         self,
         tag: str = "*",
+        *,
         description: str | None = None,
         case_sensitive: bool = False,
-        max_results: int = 10000,
-        return_desc: bool = True,
-    ) -> list[dict[str, str]] | list[str]:
-        """Search for tags by name pattern and/or description.
+        limit: int = 10_000,
+        # Read parameters (optional, triggers hybrid mode when start is provided)
+        start: str | None = None,
+        end: str | None = None,
+        interval: int | None = None,
+        read_type: ReaderType = ReaderType.INT,
+        include: IncludeFields = IncludeFields.NONE,
+        output: OutputFormat = OutputFormat.JSON,
+    ) -> pd.DataFrame | list[dict] | list[str]:
+        """Search for tags by name pattern and/or description, optionally reading their data.
+
+        This method operates in two modes:
+
+        1. **Search-only mode** (no start parameter):
+           Searches for tags matching the pattern and returns tag metadata.
+
+        2. **Hybrid mode** (start parameter provided):
+           Searches for tags, then reads their data for the specified time range.
 
         Supports wildcards:
         - '*' matches any number of characters
@@ -401,36 +427,57 @@ class AspenClient:
                          When provided, uses SQL endpoint for server-side search.
             case_sensitive: Whether tag name matching should be case-sensitive (default: False).
                            Only applies to Browse endpoint (tag-only search).
-            max_results: Maximum number of results to return (default: 10000)
-            return_desc: Whether to return descriptions (default: True).
-                        If True, returns list of dicts with 'name' and 'description'.
-                        If False, returns list of tag name strings only.
+            limit: In search-only mode: max number of tags to return (default: 10000).
+                   In hybrid mode: max number of rows per tag (default: 10000).
+            start: Start timestamp for data retrieval. When provided, triggers hybrid mode.
+            end: End timestamp for data retrieval. If omitted, defaults to current time.
+            interval: Optional interval in seconds for aggregated data (AVG reads).
+            read_type: Type of data retrieval (RAW, INT, SNAPSHOT, AVG) (default: INT).
+            include: Field inclusion options (default: NONE).
+                    - NONE: Include only timestamp and value
+                    - STATUS: Include status field
+                    - DESCRIPTION: Include description field
+                    - ALL: Include both status and description
+            output: Output format (default: JSON).
+                   - JSON: Return as list of dictionaries
+                   - DATAFRAME: Return as pandas DataFrame
 
         Returns:
-            If return_desc=True: List of dictionaries with 'name' and 'description' keys.
-            If return_desc=False: List of tag name strings.
+            **Search-only mode (no start):**
+            - If include=NONE or STATUS: List of tag name strings
+            - If include=DESCRIPTION or ALL: List of dicts with 'name' and 'description'
+
+            **Hybrid mode (with start):**
+            - If output=JSON: List of dictionaries with timestamp, tag, value, and optional fields
+            - If output=DATAFRAME: pandas DataFrame with time index and tag columns
 
         Raises:
             ValueError: If datasource is not configured
 
         Example:
-            >>> # Find all temperature tags with descriptions
-            >>> tags = client.search(tag="TEMP*")
-            >>> # Returns: [{"name": "TEMP_101", "description": "Reactor temp"}, ...]
-            >>>
-            >>> # Get just tag names without descriptions
-            >>> tag_names = client.search(tag="TEMP*", return_desc=False)
+            >>> # Search-only: Find temperature tags (returns tag names)
+            >>> tag_names = client.search(tag="TEMP*")
             >>> # Returns: ["TEMP_101", "TEMP_102", ...]
             >>>
-            >>> # Search by description only
-            >>> tags = client.search(description="reactor")
+            >>> # Search-only: Get tags with descriptions
+            >>> tags = client.search(tag="TEMP*", include=IncludeFields.DESCRIPTION)
+            >>> # Returns: [{"name": "TEMP_101", "description": "Reactor temp"}, ...]
             >>>
-            >>> # Combine name and description
-            >>> tags = client.search(tag="AI_1*", description="pressure")
+            >>> # Hybrid mode: Search and read data
+            >>> data = client.search(
+            ...     tag="TEMP*",
+            ...     start="2025-01-01 00:00:00",
+            ...     end="2025-01-01 01:00:00"
+            ... )
+            >>> # Returns: [{"timestamp": "...", "tag": "TEMP_101", "value": 25.5}, ...]
             >>>
-            >>> # Process results with descriptions
-            >>> for tag in tags:
-            ...     print(f"{tag['name']}: {tag['description']}")
+            >>> # Hybrid mode with DataFrame output
+            >>> df = client.search(
+            ...     tag="TEMP*",
+            ...     start="2025-01-01 00:00:00",
+            ...     output=OutputFormat.DATAFRAME
+            ... )
+            >>> # Returns: DataFrame with time index and TEMP_* columns
         """
         import urllib.parse
 
@@ -441,110 +488,131 @@ class AspenClient:
                 "AspenClient(base_url=..., datasource='your_datasource')"
             )
 
-        logger.info(f"Searching tags: pattern={tag}, description={description}")
+        # Determine if we need descriptions for search results
+        need_descriptions = include in (IncludeFields.DESCRIPTION, IncludeFields.ALL)
 
+        logger.info(
+            f"Searching tags: pattern={tag}, description={description}, "
+            f"hybrid_mode={start is not None}"
+        )
+
+        # Step 1: Search for tags
         # If description is provided, use SQL endpoint for efficient server-side search
         if description:
-            return self._search_by_sql(
+            search_results = self._search_by_sql(
                 description=description,
                 tag_pattern=tag,
-                max_results=max_results,
-                return_desc=return_desc,
+                max_results=limit,
+                return_desc=need_descriptions,
             )
+        else:
+            # Use Browse endpoint for tag name search
+            from typing import Any
 
-        # Otherwise, use Browse endpoint for tag name search
-        # Use Any type for results list to handle both dict and str
-        from typing import Any
+            results: list[Any] = []
 
-        results: list[Any] = []
+            # Build query parameters
+            params = {
+                "dataSource": self.datasource,
+                "tag": tag,
+                "max": limit,
+                "getTrendable": 0,
+            }
 
-        # Build query parameters
-        # Note: The key is "dataSource" (camelCase)
-        params = {
-            "dataSource": self.datasource,
-            "tag": tag,
-            "max": max_results,
-            "getTrendable": 0,
-        }
+            # Construct Browse endpoint URL with manually encoded query string
+            encoded_params = urllib.parse.urlencode(params, safe="*", quote_via=urllib.parse.quote)
+            browse_url = f"{self.base_url}/Browse?{encoded_params}"
 
-        # Construct Browse endpoint URL with manually encoded query string
-        # We need to keep * unencoded for wildcard matching
-        # Following tagreader's approach: encode with safe="*"
-        encoded_params = urllib.parse.urlencode(params, safe="*", quote_via=urllib.parse.quote)
-        browse_url = f"{self.base_url}/Browse?{encoded_params}"
+            logger.info(f"Browse request: GET {browse_url}")
+            logger.debug(f"Query params: {params}")
 
-        logger.info(f"Browse request: GET {browse_url}")
-        logger.debug(f"Query params: {params}")
+            try:
+                response = self._client.get(browse_url)
+                logger.debug(f"Response status: {response.status_code}")
 
-        try:
-            # Make GET request to Browse endpoint
-            # URL already contains query string, so don't pass params again
-            response = self._client.get(browse_url)
+                response.raise_for_status()
+                data = response.json()
 
-            # Log the actual request details
-            logger.debug(f"Request URL: {response.request.url}")
-            logger.debug(f"Request method: {response.request.method}")
-            logger.debug(f"Response status: {response.status_code}")
+                # Check for API error response
+                if "data" in data and isinstance(data["data"], dict):
+                    data_obj = data["data"]
 
-            response.raise_for_status()
-            data = response.json()
+                    # Check for error in result
+                    if "result" in data_obj:
+                        result = data_obj["result"]
+                        if isinstance(result, dict) and result.get("er", 0) != 0:
+                            error_msg = result.get("es", "Unknown error")
+                            logger.error(f"API error from Browse endpoint: {error_msg}")
+                            raise ValueError(f"Browse API error: {error_msg}")
 
-            logger.debug(f"Browse response keys: {list(data.keys())}")
+                    # Check if tags key exists
+                    if "tags" not in data_obj:
+                        logger.warning("No 'tags' key in response - search returned no results")
+                        return []
 
-            # Check for API error response
-            if "data" in data and isinstance(data["data"], dict):
-                data_obj = data["data"]
-                logger.debug(f"data['data'] keys: {list(data_obj.keys())}")
-
-                # Check for error in result
-                if "result" in data_obj:
-                    result = data_obj["result"]
-                    if isinstance(result, dict) and result.get("er", 0) != 0:
-                        error_msg = result.get("es", "Unknown error")
-                        logger.error(f"API error from Browse endpoint: {error_msg}")
-                        raise ValueError(f"Browse API error: {error_msg}")
-
-                # Check if tags key exists
-                if "tags" not in data_obj:
-                    logger.warning("No 'tags' key in response - search returned no results")
-                    logger.debug(f"Full response: {data}")
+                    tags_data = data_obj["tags"]
+                else:
+                    logger.error(f"Unexpected response structure: {data}")
                     return []
 
-                tags_data = data_obj["tags"]
-            else:
-                logger.error(f"Unexpected response structure: {data}")
-                return []
+                if not tags_data:
+                    logger.info("Search returned 0 tags")
+                    return []
 
-            logger.debug(f"tags_data type: {type(tags_data)}, length: {len(tags_data)}")
+                for tag_entry in tags_data:
+                    tag_name = tag_entry.get("t", "")
+                    tag_desc = tag_entry.get("n", tag_entry.get("m", ""))
 
-            if not tags_data:
-                logger.info("Search returned 0 tags")
-                return []
+                    # Apply case-insensitive filtering if needed
+                    if (
+                        not case_sensitive
+                        and tag
+                        and "*" not in tag
+                        and "?" not in tag
+                        and tag.lower() not in tag_name.lower()
+                    ):
+                        continue
 
-            for tag_entry in tags_data:
-                tag_name = tag_entry.get("t", "")
-                # Response contains "m" (map type) like "IP_ANALOGMAP", "KPI_VALUEMAP"
-                # and optionally "n" (description). Use "n" if available, otherwise "m"
-                tag_desc = tag_entry.get("n", tag_entry.get("m", ""))
+                    if need_descriptions:
+                        results.append({"name": tag_name, "description": tag_desc})
+                    else:
+                        results.append(tag_name)
 
-                # Apply case-insensitive filtering if needed
-                if (
-                    not case_sensitive
-                    and tag
-                    and "*" not in tag
-                    and "?" not in tag
-                    and tag.lower() not in tag_name.lower()
-                ):
-                    continue
+                logger.info(f"Found {len(results)} matching tags")
+                search_results = results[:limit]
 
-                if return_desc:
-                    results.append({"name": tag_name, "description": tag_desc})
-                else:
-                    results.append(tag_name)
+            except Exception as e:
+                logger.error(f"Error searching tags: {type(e).__name__}: {e}")
+                raise
 
-            logger.info(f"Found {len(results)} matching tags")
-            return results[:max_results]
+        # Step 2: If no start time, return search results (search-only mode)
+        if start is None:
+            return search_results
 
-        except Exception as e:
-            logger.error(f"Error searching tags: {type(e).__name__}: {e}")
-            raise
+        # Step 3: Hybrid mode - extract tag names and read data
+        if not search_results:
+            logger.info("No tags found, returning empty result")
+            # Return appropriate empty structure based on output format
+            if output == OutputFormat.DATAFRAME:
+                return pd.DataFrame()
+            return []
+
+        # Extract tag names from search results
+        if isinstance(search_results[0], dict):
+            tag_names = [t["name"] for t in search_results]  # type: ignore[index]
+        else:
+            tag_names = search_results  # type: ignore[assignment]
+
+        logger.info(f"Reading data for {len(tag_names)} tags")
+
+        # Call read() method with the found tags
+        return self.read(
+            tags=tag_names,
+            start=start,
+            end=end,
+            interval=interval,
+            read_type=read_type,
+            include=include,
+            limit=limit,
+            output=output,
+        )
