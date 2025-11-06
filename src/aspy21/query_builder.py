@@ -439,3 +439,124 @@ def build_sql_search_query(
         tag_pattern=tag_pattern,
         max_results=max_results,
     )
+
+
+class SqlAggregatesQueryBuilder(QueryBuilder):
+    """Query builder for SQL aggregates table queries."""
+
+    def build(
+        self,
+        tags: list[str] | str,
+        start: str,
+        end: str,
+        datasource: str,
+        read_type: ReaderType,
+        with_description: bool = False,
+        include_status: bool = False,
+    ) -> str:
+        """Generate SQL query for aggregates table.
+
+        Args:
+            tags: Tag name(s) - single tag string or list of tags
+            start: Start timestamp (ISO format)
+            end: End timestamp (ISO format)
+            datasource: Aspen datasource name
+            read_type: Type of aggregation (AGG_MIN, AGG_MAX, AGG_AVG, AGG_RNG)
+            with_description: Include ip_description field in response
+            include_status: Include status field in response (not supported for aggregates)
+
+        Returns:
+            XML query string for SQL endpoint
+        """
+        import xml.etree.ElementTree as ET
+        from datetime import datetime
+
+        # Convert tags to list if string
+        tags_list = [tags] if isinstance(tags, str) else tags
+
+        # Calculate period as end - start
+        start_dt = pd.to_datetime(start)
+        end_dt = pd.to_datetime(end)
+        period_seconds = int((end_dt - start_dt).total_seconds())
+
+        # Convert to HH:MM:SS format
+        hours = period_seconds // 3600
+        minutes = (period_seconds % 3600) // 60
+        seconds = period_seconds % 60
+        period_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+        # Map ReaderType to SQL column name
+        agg_column_map = {
+            ReaderType.AGG_MIN: "min",
+            ReaderType.AGG_MAX: "max",
+            ReaderType.AGG_AVG: "avg",
+            ReaderType.AGG_RNG: "rng",
+        }
+
+        column_name = agg_column_map.get(read_type)
+        if column_name is None:
+            raise ValueError(f"Unsupported read_type for aggregates: {read_type}")
+
+        # Build SELECT clause
+        select_fields = ["ts", "name", column_name]
+        if with_description:
+            select_fields.append("name->ip_description")
+
+        select_clause = ", ".join(select_fields)
+
+        # Build SQL query for multiple tags using UNION ALL
+        sql_queries = []
+        for tag in tags_list:
+            sql = (
+                f"SELECT {select_clause} FROM aggregates "
+                f"WHERE name = '{tag}' "
+                f"AND ts BETWEEN '{start}' AND '{end}' "
+                f"AND period = '{period_str}'"
+            )
+            sql_queries.append(sql)
+
+        # Combine with UNION ALL for multiple tags
+        full_sql = " UNION ALL ".join(sql_queries)
+
+        # Wrap in XML format
+        root = ET.Element("Sql")
+        root.text = full_sql
+
+        ET.SubElement(root, "Datasource").text = datasource
+
+        return ET.tostring(root, encoding="unicode")
+
+
+def build_aggregates_sql_query(
+    tags: list[str] | str,
+    start: str,
+    end: str,
+    datasource: str,
+    read_type: ReaderType,
+    with_description: bool = False,
+    include_status: bool = False,
+) -> str:
+    """Generate SQL query for aggregates table.
+
+    Args:
+        tags: Tag name(s) - single tag string or list of tags
+        start: Start timestamp (ISO format)
+        end: End timestamp (ISO format)
+        datasource: Aspen datasource name
+        read_type: Type of aggregation (AGG_MIN, AGG_MAX, AGG_AVG, AGG_RNG)
+        with_description: Include ip_description field in response
+        include_status: Include status field in response (not supported for aggregates)
+
+    Returns:
+        XML query string for SQL endpoint
+    """
+    builder = SqlAggregatesQueryBuilder()
+    return builder.build(
+        tags=tags,
+        start=start,
+        end=end,
+        datasource=datasource,
+        read_type=read_type,
+        with_description=with_description,
+        include_status=include_status,
+    )

@@ -24,7 +24,8 @@
 - **Hybrid search mode**: Search for tags and read their data in one call
 - Tag search with wildcards and description filtering
 - Unified interface for analog, discrete, and text tags
-- Support for RAW, INT, SNAPSHOT, and AVG reader types
+- Support for RAW, INT, SNAPSHOT, AVG, and aggregate reader types (MIN, MAX, AVG, RNG)
+- **Aggregates queries**: Get min/max/avg/range statistics over entire periods
 - Pandas DataFrame or JSON output with optional status and description fields
 - Enum-based parameters for cleaner, type-safe API
 - Configurable row limits and query parameters
@@ -277,6 +278,12 @@ Data retrieval modes:
 - `ReaderType.INT` - Interpolated values at specified intervals (default)
 - `ReaderType.SNAPSHOT` - Current snapshot of tag values
 - `ReaderType.AVG` - Average values over specified intervals
+- `ReaderType.AGG_MIN` - Minimum value over the period (from aggregates table)
+- `ReaderType.AGG_MAX` - Maximum value over the period (from aggregates table)
+- `ReaderType.AGG_AVG` - Average value over the period (from aggregates table)
+- `ReaderType.AGG_RNG` - Range (max-min) over the period (from aggregates table)
+
+**Aggregates types** query the `aggregates` table with the period automatically calculated from `end - start`.
 
 #### IncludeFields
 
@@ -294,19 +301,30 @@ Controls output format:
 - `OutputFormat.JSON` - Return as list of dictionaries (default)
 - `OutputFormat.DATAFRAME` - Return as pandas DataFrame
 
-**Example**:
+**Examples**:
 ```python
 from aspy21 import AspenClient, IncludeFields, OutputFormat, ReaderType
 
-# Use all three enums together
+# Read average values over intervals
 df = client.read(
     ["TAG1", "TAG2"],
     start="2025-01-01 00:00:00",
     end="2025-01-01 01:00:00",
     read_type=ReaderType.AVG,
+    interval=600,  # 10-minute averages
     include=IncludeFields.ALL,
     output=OutputFormat.DATAFRAME
 )
+
+# Read aggregate statistics for entire period
+aggregates = client.read(
+    ["TAG1"],
+    start="2025-01-01 00:00:00",
+    end="2025-01-02 00:00:00",
+    read_type=ReaderType.AGG_MIN,  # Get minimum value over 24 hours
+    output=OutputFormat.JSON
+)
+# Returns: [{"timestamp": "...", "tag": "TAG1", "value": 10.5}]
 ```
 
 ---

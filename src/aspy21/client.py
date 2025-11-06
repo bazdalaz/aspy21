@@ -115,10 +115,18 @@ class AspenClient:
             self._client = http_client
 
         # Initialize reader strategies
-        from .readers import SnapshotReader, SqlHistoryReader, XmlHistoryReader
+        from .readers import (
+            AggregatesReader,
+            SnapshotReader,
+            SqlHistoryReader,
+            XmlHistoryReader,
+        )
 
         self._readers = [
             SnapshotReader(self.base_url, self.datasource, self._client),
+            AggregatesReader(
+                self.base_url, self.datasource, self._client
+            ),  # Check aggregates before history
             SqlHistoryReader(self.base_url, self.datasource, self._client),
             XmlHistoryReader(self.base_url, self.datasource, self._client),
         ]
