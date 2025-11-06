@@ -243,6 +243,7 @@ class AspenClient:
         elif start is not None and end is None:
             # If start provided but end omitted, use current time
             from datetime import datetime
+
             end = datetime.now().isoformat()
             logger.debug(f"End time not provided, using current time: {end}")
 

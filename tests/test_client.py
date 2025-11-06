@@ -978,8 +978,6 @@ def test_search_requires_datasource():
     c.close()
 
 
-
-
 def test_search_hybrid_mode_dataframe(mock_api):
     """Test hybrid search mode: search + read returning DataFrame."""
     # Mock Browse endpoint for search
@@ -1272,6 +1270,8 @@ def test_search_only_mode_vs_hybrid_mode(mock_api):
     assert result_search_only[0] == "TAG1"
 
     c.close()
+
+
 def test_context_manager_basic(mock_api):
     """Test context manager enters and exits properly."""
     mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
