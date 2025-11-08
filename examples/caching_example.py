@@ -12,8 +12,8 @@ from aspy21 import AspenClient, CacheConfig, OutputFormat, configure_logging
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
-# Configure logging to see cache hits/misses
-configure_logging()
+# Configure logging to see cache hits/misses (set to INFO to reduce noise)
+configure_logging(level="INFO")
 
 print("\n" + "=" * 80)
 print("Caching Example - Reduce API Load & Improve Performance")
@@ -60,6 +60,13 @@ with AspenClient(
     print(f"  Time: {api_time:.3f}s")
     print(f"  Data points: {len(data1) if isinstance(data1, list) else 0}")
 
+    # Inspect cache internals - see what was cached
+    if client._cache:
+        print(f"  Cache now contains: {len(client._cache._cache)} entry")
+        # Show cache entry details
+        for key, entry in client._cache._cache.items():
+            print(f"    Key: {key[:12]}... | {entry}")
+
     # Second read with same parameters - will hit cache
     print("\nSecond read with same parameters (cache hit)...")
     start_time = time.time()
@@ -75,6 +82,11 @@ with AspenClient(
         print(f"  Speedup: {api_time / cache_time:.1f}x faster!")
     else:
         print("  Speedup: >1000x faster! (cache time < 0.001s)")
+
+    # Verify data is identical
+    print(f"\nData comparison:")
+    print(f"  data1 == data2: {data1 == data2}")
+    print(f"  Both have {len(data1) if isinstance(data1, list) else 0} data points")
 
     # Show cache statistics
     stats = client.get_cache_stats()
@@ -124,8 +136,8 @@ with AspenClient(
 
 print()
 
-# Example 3: Cache management
-print("Example 3: Cache management (stats, clear, invalidate)")
+# Example 3: Cache management and inspection
+print("Example 3: Cache management (stats, clear, inspect contents)")
 print("-" * 80)
 
 with AspenClient(
@@ -135,14 +147,24 @@ with AspenClient(
     cache=True,
 ) as client:
     # Make some requests to populate cache
+    print("Populating cache with multiple operations...")
     client.read(["GTI118.PV"], start="2025-01-01 08:00:00", end="2025-01-01 09:00:00")
     client.read(["GTI119.PV"], start="2025-01-01 08:00:00", end="2025-01-01 09:00:00")
-    client.search("GTI*", limit=5)
+    tags = client.search("GTI*", limit=5)
 
     # Check cache stats
     stats = client.get_cache_stats()
     if stats:
-        print(f"Cache populated: {stats['size']} entries")
+        print(f"\nCache populated: {stats['size']} entries")
+        print(f"Total requests: {stats['total_requests']}")
+
+    # Inspect cache contents
+    if client._cache:
+        print("\nCache contents:")
+        for idx, (key, entry) in enumerate(client._cache._cache.items(), 1):
+            data_type = type(entry.value).__name__
+            data_size = len(entry.value) if isinstance(entry.value, list) else "N/A"
+            print(f"  {idx}. Key: {key[:12]}... | Type: {data_type} | Size: {data_size} | {entry}")
 
     # Clear entire cache
     print("\nClearing cache...")
@@ -155,8 +177,58 @@ with AspenClient(
 
 print()
 
-# Example 4: Smart caching - only historical data is cached
-print("Example 4: Smart caching (only historical data is cached)")
+# Example 4: Comparing cached vs fresh data
+print("Example 4: Comparing cached vs fresh data")
+print("-" * 80)
+
+with AspenClient(
+    base_url=base_url,
+    auth=(username, password),
+    datasource=datasource,
+    cache=True,
+) as client:
+    # First request - hits API
+    print("First request (from API)...")
+    data_from_api = client.read(
+        ["GTI118.PV"],
+        start="2025-01-01 10:00:00",
+        end="2025-01-01 11:00:00",
+        output=OutputFormat.JSON,
+    )
+    print(
+        f"  Got {len(data_from_api) if isinstance(data_from_api, list) else 0} data points from API"
+    )
+
+    # Second request - from cache
+    print("\nSecond request (from cache)...")
+    data_from_cache = client.read(
+        ["GTI118.PV"],
+        start="2025-01-01 10:00:00",
+        end="2025-01-01 11:00:00",
+        output=OutputFormat.JSON,
+    )
+    print(
+        f"  Got {len(data_from_cache) if isinstance(data_from_cache, list) else 0} data points from cache"
+    )
+
+    # Compare the data
+    print("\nData comparison:")
+    print(f"  Identical data: {data_from_api == data_from_cache}")
+    print(f"  Same object in memory: {data_from_api is data_from_cache}")
+
+    # Show first few data points
+    if isinstance(data_from_api, list) and len(data_from_api) > 0:
+        print(f"\nFirst data point from API:   {data_from_api[0]}")
+        print(f"First data point from cache: {data_from_cache[0]}")
+
+    stats = client.get_cache_stats()
+    if stats:
+        print(f"\nCache stats: {stats['hits']} hits, {stats['misses']} misses")
+
+print()
+
+# Example 5: Smart caching with different TTLs
+print("Example 5: Smart caching - different TTLs for different data types")
 print("-" * 80)
 
 with AspenClient(
@@ -167,28 +239,27 @@ with AspenClient(
 ) as client:
     from datetime import datetime
 
-    # Read historical data (will be cached)
-    print("Reading historical data (2025-01-01, will be cached)...")
+    # Read historical data (will be cached with long TTL - 24h)
+    print("Reading historical data (2025-01-01, cached for 24 hours)...")
     client.read(
         ["GTI118.PV"],
         start="2025-01-01 08:00:00",
         end="2025-01-01 09:00:00",
     )
 
-    # Read current data (will NOT be cached with long TTL)
-    print("Reading current data (will not be cached with long TTL)...")
-    now = datetime.now()
-    client.read(
-        ["GTI118.PV"],
-        start=now.isoformat(),
-        end=now.isoformat(),
-    )
+    # Search tags (cached for 1 hour)
+    print("Searching tags (cached for 1 hour)...")
+    client.search("GTI*", limit=3)
 
-    stats = client.get_cache_stats()
-    if stats:
-        print(f"\nCache stats: {stats['size']} entries cached")
-        print("Note: Only historical data is cached with long TTL (24h)")
-        print("      Current/recent data uses short TTL (1min) or no caching")
+    # Show cache with different TTLs
+    if client._cache:
+        print(f"\nCache contains {len(client._cache._cache)} entries with different TTLs:")
+        for idx, (key, entry) in enumerate(client._cache._cache.items(), 1):
+            ttl_remaining = (entry.expires_at - datetime.now()).total_seconds()
+            print(f"  {idx}. {entry} | TTL remaining: {ttl_remaining:.0f}s")
+
+    print("\nNote: Historical data cached longer (24h) than search results (1h)")
+    print("      This reduces API load while keeping current data fresh")
 
 print()
 
