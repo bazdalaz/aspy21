@@ -1,10 +1,11 @@
 import pytest
 
-from aspy21.query_builder import build_snapshot_sql_query
+from aspy21.query_builder import SqlSnapshotQueryBuilder
 
 
 def test_build_snapshot_sql_query_multiple_tags():
-    xml = build_snapshot_sql_query(
+    builder = SqlSnapshotQueryBuilder()
+    xml = builder.build(
         tags=["GXV1255.PV", "GP901.PV"],
         datasource="IP21",
         with_description=False,
@@ -22,7 +23,8 @@ def test_build_snapshot_sql_query_multiple_tags():
 
 
 def test_build_snapshot_sql_query_with_description_single_tag():
-    xml = build_snapshot_sql_query(
+    builder = SqlSnapshotQueryBuilder()
+    xml = builder.build(
         tags="73_V101.PHASE",
         datasource="PLANT",
         with_description=True,
@@ -38,5 +40,6 @@ def test_build_snapshot_sql_query_with_description_single_tag():
 
 
 def test_build_snapshot_sql_query_requires_tag():
+    builder = SqlSnapshotQueryBuilder()
     with pytest.raises(ValueError):
-        build_snapshot_sql_query(tags=[], datasource="IP21")
+        builder.build(tags=[], datasource="IP21")

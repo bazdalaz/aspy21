@@ -97,13 +97,12 @@ from aspy21 import AspenClient, ReaderType, configure_logging
 # Optional: configure logging
 configure_logging("INFO")
 
-# Connect to Aspen
-client = AspenClient(
+# Connect to Aspen using context manager (recommended)
+with AspenClient(
     base_url="http://your-server/ProcessData/AtProcessDataREST.dll",
-    username="your-username",
-    password="your-password",
-    datasource="your-datasource",  # Optional
-)
+    auth=("your-username", "your-password"),
+    datasource="IP21",  # Required for historical reads
+) as client:
 
 # Read data
 df = client.read(

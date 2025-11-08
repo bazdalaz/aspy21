@@ -68,7 +68,8 @@ from aspy21 import AspenClient, OutputFormat, ReaderType
 # Initialize client using context manager (recommended)
 with AspenClient(
     base_url="https://aspen.myplant.local/ProcessData",
-    auth=("user", "password")
+    auth=("user", "password"),
+    datasource="IP21"  # Required for historical reads
 ) as client:
     # Read historical data
     df = client.read(
@@ -93,7 +94,8 @@ with AspenClient(
 ```python
 with AspenClient(
     base_url="https://aspen.example.com/ProcessData",
-    auth=("user", "password")
+    auth=("user", "password"),
+    datasource="IP21"  # Required for historical reads
 ) as client:
     # Your code here
     pass
@@ -105,7 +107,8 @@ For public or internal endpoints:
 
 ```python
 with AspenClient(
-    base_url="http://aspen.example.com/ProcessData"
+    base_url="http://aspen.example.com/ProcessData",
+    datasource="IP21"  # Required for historical reads
 ) as client:
     # Your code here
     pass
@@ -363,7 +366,8 @@ import httpx
 try:
     with AspenClient(
         base_url="https://aspen.example.com/ProcessData",
-        auth=("user", "password")
+        auth=("user", "password"),
+        datasource="IP21"
     ) as client:
         df = client.read(
             ["ATI111"],
