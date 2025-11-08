@@ -462,7 +462,7 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
             start: Start timestamp (ISO format)
             end: End timestamp (ISO format)
             datasource: Aspen datasource name
-            read_type: Type of aggregation (AGG_MIN, AGG_MAX, AGG_AVG, AGG_RNG)
+            read_type: Type of aggregation (MIN, MAX, RNG)
             with_description: Include ip_description field in response
             include_status: Include status field in response (not supported for aggregates)
 
@@ -483,10 +483,9 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
 
         # Map ReaderType to SQL column name
         agg_column_map = {
-            ReaderType.AGG_MIN: "min",
-            ReaderType.AGG_MAX: "max",
-            ReaderType.AGG_AVG: "avg",
-            ReaderType.AGG_RNG: "rng",
+            ReaderType.MIN: "min",
+            ReaderType.MAX: "max",
+            ReaderType.RNG: "rng",
         }
 
         column_name = agg_column_map.get(read_type)
@@ -539,7 +538,7 @@ def build_aggregates_sql_query(
         start: Start timestamp (ISO format)
         end: End timestamp (ISO format)
         datasource: Aspen datasource name
-        read_type: Type of aggregation (AGG_MIN, AGG_MAX, AGG_AVG, AGG_RNG)
+        read_type: Type of aggregation (MIN, MAX, RNG)
         with_description: Include ip_description field in response
         include_status: Include status field in response (not supported for aggregates)
 

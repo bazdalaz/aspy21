@@ -11,20 +11,18 @@ class ReaderType(str, Enum):
         INT: Interpolated values at specified intervals
         SNAPSHOT: Current snapshot of tag values
         AVG: Average values over specified intervals
-        AGG_MIN: Minimum value over the period (from aggregates table)
-        AGG_MAX: Maximum value over the period (from aggregates table)
-        AGG_AVG: Average value over the period (from aggregates table)
-        AGG_RNG: Range (max-min) over the period (from aggregates table)
+        MIN: Minimum value over the period (from aggregates table)
+        MAX: Maximum value over the period (from aggregates table)
+        RNG: Range (max-min) over the period (from aggregates table)
     """
 
     RAW = "RAW"
     INT = "INT"
     SNAPSHOT = "SNAPSHOT"
     AVG = "AVG"
-    AGG_MIN = "AGG_MIN"
-    AGG_MAX = "AGG_MAX"
-    AGG_AVG = "AGG_AVG"
-    AGG_RNG = "AGG_RNG"
+    MIN = "MIN"
+    MAX = "MAX"
+    RNG = "RNG"
 
 
 class IncludeFields(str, Enum):

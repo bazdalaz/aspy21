@@ -24,8 +24,8 @@
 - **Hybrid search mode**: Search for tags and read their data in one call
 - Tag search with wildcards and description filtering
 - Unified interface for analog, discrete, and text tags
-- Support for RAW, INT, SNAPSHOT, AVG, and aggregate reader types (MIN, MAX, AVG, RNG)
-- **Aggregates queries**: Get min/max/avg/range statistics over entire periods
+- Support for RAW, INT, SNAPSHOT, AVG, and aggregate reader types (MIN, MAX, RNG)
+- **Aggregates queries**: Get min/max/range statistics over entire periods
 - Pandas DataFrame or JSON output with optional status and description fields
 - Enum-based parameters for cleaner, type-safe API
 - Configurable row limits and query parameters
@@ -278,12 +278,11 @@ Data retrieval modes:
 - `ReaderType.INT` - Interpolated values at specified intervals (default)
 - `ReaderType.SNAPSHOT` - Current snapshot of tag values
 - `ReaderType.AVG` - Average values over specified intervals
-- `ReaderType.AGG_MIN` - Minimum value over the period (from aggregates table)
-- `ReaderType.AGG_MAX` - Maximum value over the period (from aggregates table)
-- `ReaderType.AGG_AVG` - Average value over the period (from aggregates table)
-- `ReaderType.AGG_RNG` - Range (max-min) over the period (from aggregates table)
+- `ReaderType.MIN` - Minimum value over the period (from aggregates table)
+- `ReaderType.MAX` - Maximum value over the period (from aggregates table)
+- `ReaderType.RNG` - Range (max-min) over the period (from aggregates table)
 
-**Aggregates types** query the `aggregates` table with the period automatically calculated from `end - start`.
+**Aggregates types** query the `aggregates` table with the period automatically calculated as `(end - start)` in tenths of seconds. For example, a 24-hour period becomes `864000` (24 × 60 × 60 × 10).
 
 #### IncludeFields
 
@@ -321,7 +320,7 @@ aggregates = client.read(
     ["TAG1"],
     start="2025-01-01 00:00:00",
     end="2025-01-02 00:00:00",
-    read_type=ReaderType.AGG_MIN,  # Get minimum value over 24 hours
+    read_type=ReaderType.MIN,  # Get minimum value over 24 hours
     output=OutputFormat.JSON
 )
 # Returns: [{"timestamp": "...", "tag": "TAG1", "value": 10.5}]
