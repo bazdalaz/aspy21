@@ -368,6 +368,23 @@ class AspenClient:
         logger.debug(f"Tags: {tags}")
         logger.debug(f"Reader type: {effective_read_type.value}, Interval: {interval}")
 
+        # Check cache before making API call (only for historical data)
+        if self._cache and self._is_historical_data(end):
+            cache_operation = self._determine_cache_operation(effective_read_type, start, end)
+            cache_key_params = {
+                "tags": tags,
+                "start": start,
+                "end": end,
+                "interval": interval,
+                "read_type": effective_read_type.value,
+                "include_status": include_status,
+                "with_description": with_description,
+            }
+            cached_result = self._cache.get(cache_operation, **cache_key_params)
+            if cached_result is not None:
+                logger.debug(f"Cache hit for {cache_operation}")
+                return cached_result
+
         # Require datasource for historical reads (RAW, INT, MIN, MAX, AVG, RNG)
         if start is not None and end is not None and not self.datasource:
             message = "Datasource is required for historical reads. "
@@ -406,6 +423,15 @@ class AspenClient:
         # Only cache historical data with long TTL to avoid caching current values
         if self._cache and self._is_historical_data(end):
             cache_operation = self._determine_cache_operation(effective_read_type, start, end)
+            cache_key_params = {
+                "tags": tags,
+                "start": start,
+                "end": end,
+                "interval": interval,
+                "read_type": effective_read_type.value,
+                "include_status": include_status,
+                "with_description": with_description,
+            }
             self._cache.set(cache_operation, result, **cache_key_params)
             logger.debug(f"Cached result for {cache_operation}")
 
