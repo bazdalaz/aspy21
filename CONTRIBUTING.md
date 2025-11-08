@@ -21,12 +21,12 @@ This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participatin
 
 ### Ways to Contribute
 
-- 🐛 **Report bugs**: Open an issue using the bug report template
-- ✨ **Suggest features**: Open an issue using the feature request template
-- 📚 **Improve documentation**: Help us make our docs clearer
-- 🔧 **Fix issues**: Check our [issue tracker](https://github.com/bazdalaz/aspy21/issues)
-- ✅ **Write tests**: Improve our test coverage
-- 🎨 **Code improvements**: Refactoring, performance optimizations
+- **Report bugs**: Open an issue using the bug report template
+- **Suggest features**: Open an issue using the feature request template
+- **Improve documentation**: Help us make our docs clearer
+- **Fix issues**: Check our [issue tracker](https://github.com/bazdalaz/aspy21/issues)
+- **Write tests**: Improve our test coverage
+- **Code improvements**: Refactoring, performance optimizations
 
 ### First Time Contributors
 
@@ -205,12 +205,12 @@ just ci  # If using just
 
 All contributions must:
 
-- ✅ Pass all tests
-- ✅ Pass Ruff formatting and linting
-- ✅ Pass Pyright type checking
-- ✅ Maintain or improve code coverage
-- ✅ Include docstrings for public APIs
-- ✅ Update relevant documentation
+- Pass all tests
+- Pass Ruff formatting and linting
+- Pass Pyright type checking
+- Maintain or improve code coverage
+- Include docstrings for public APIs
+- Update relevant documentation
 
 ## Submitting Changes
 
@@ -302,10 +302,10 @@ Releases are automated via GitHub Actions:
 
 ## Getting Help
 
-- 📖 Check our [documentation](README.md)
-- 💬 Ask questions in [Discussions](https://github.com/bazdalaz/aspy21/discussions)
-- 🐛 Report bugs via [Issues](https://github.com/bazdalaz/aspy21/issues)
-- 📧 Contact maintainers (see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md))
+- Check our [documentation](README.md)
+- Ask questions in [Discussions](https://github.com/bazdalaz/aspy21/discussions)
+- Report bugs via [Issues](https://github.com/bazdalaz/aspy21/issues)
+- Contact maintainers (see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md))
 
 ## Recognition
 
