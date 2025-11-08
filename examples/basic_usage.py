@@ -5,7 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from aspy21 import AspenClient, OutputFormat, ReaderType, configure_logging
+from aspy21 import AspenClient, OutputFormat, configure_logging
 
 # Load .env from project root
 env_path = Path(__file__).parent.parent / ".env"

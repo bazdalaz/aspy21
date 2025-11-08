@@ -124,9 +124,8 @@ class AggregatesReader(BaseReader):
         try:
             response_data = response.json()
             logger.debug(f"Parsed JSON type: {type(response_data)}")
-            logger.debug(
-                f"Parsed JSON keys (if dict): {response_data.keys() if isinstance(response_data, dict) else 'N/A'}"
-            )
+            keys = response_data.keys() if isinstance(response_data, dict) else "N/A"
+            logger.debug(f"Parsed JSON keys (if dict): {keys}")
             logger.debug(f"Parsed JSON content: {response_data}")
         except Exception as e:
             logger.error(f"Failed to parse response as JSON: {type(e).__name__}: {e}")

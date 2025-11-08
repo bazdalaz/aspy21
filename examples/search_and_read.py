@@ -48,7 +48,7 @@ try:
         # Example 1: Search and read separately
         print("Example 1: Search for tags and read their data separately")
         print("-" * 80)
-        print("Searching for temperature tags...")
+        print("Searching for GFI tags...")
 
         # Get list of tag names matching pattern (default include=NONE returns list[str])
         tag_names_result = client.search("GFI*", limit=5)
@@ -135,7 +135,7 @@ try:
 
         # Search broadly and get descriptions
         all_tags_result = client.search(
-            "G*", description="V1-01", limit=20, include=IncludeFields.DESCRIPTION
+            "G?I*", description="V1-01", limit=20, include=IncludeFields.DESCRIPTION
         )
         # Type narrowing: include=DESCRIPTION guarantees list[dict[str, str]]
         assert isinstance(all_tags_result, list) and (

@@ -303,9 +303,8 @@ class SqlAggregatesResponseParser(ResponseParser):
         try:
             logger.debug("SqlAggregatesResponseParser.parse called")
             logger.debug(f"Response type: {type(response)}")
-            logger.debug(
-                f"Response keys (if dict): {response.keys() if isinstance(response, dict) else 'N/A'}"
-            )
+            keys = response.keys() if isinstance(response, dict) else "N/A"
+            logger.debug(f"Response keys (if dict): {keys}")
             logger.debug(f"Response content (first 500 chars): {str(response)[:500]}")
             logger.debug(f"Tag names: {tag_names}")
             logger.debug(f"Value column: {value_column}")
@@ -325,20 +324,18 @@ class SqlAggregatesResponseParser(ResponseParser):
                     return [], {}
 
                 data_array = response["data"]
-                logger.debug(
-                    f"data_array type: {type(data_array)}, length: {len(data_array) if isinstance(data_array, list) else 'N/A'}"
-                )
+                length = len(data_array) if isinstance(data_array, list) else "N/A"
+                logger.debug(f"data_array type: {type(data_array)}, length: {length}")
 
                 if not isinstance(data_array, list) or not data_array:
-                    logger.error(f"Invalid or empty 'data' array in response")
+                    logger.error("Invalid or empty 'data' array in response")
                     return [], {}
 
                 # Get first result set
                 result_set = data_array[0]
                 logger.debug(f"result_set type: {type(result_set)}")
-                logger.debug(
-                    f"result_set keys (if dict): {result_set.keys() if isinstance(result_set, dict) else 'N/A'}"
-                )
+                keys = result_set.keys() if isinstance(result_set, dict) else "N/A"
+                logger.debug(f"result_set keys (if dict): {keys}")
 
                 if not isinstance(result_set, dict):
                     logger.error(f"result_set is not a dict: {type(result_set)}")

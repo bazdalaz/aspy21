@@ -16,7 +16,7 @@ authors = [{ name = "bazdalaz" }]
 maintainers = [{ name = "bazdalaz", email = "bazdalaz@users.noreply.github.com" }]
 keywords = ["aspen", "ip21", "historian", "process data", "industrial", "ot", "scada", "aspentech"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Manufacturing",
     "Intended Audience :: Science/Research",

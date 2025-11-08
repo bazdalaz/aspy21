@@ -1326,6 +1326,7 @@ def test_aggregates_period_calculation(mock_api):
 
     # Check that period is in tenths of seconds, not HH:MM format
     # 24 hours = 24*60*60*10 = 864000 tenths of seconds
+    assert sql_query is not None, "SQL query should not be None"
     assert "period = 864000" in sql_query, f"Expected 'period = 864000' in SQL: {sql_query}"
     assert "period = '24:00'" not in sql_query, f"Should not use HH:MM format: {sql_query}"
 
