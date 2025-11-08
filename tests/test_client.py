@@ -1119,7 +1119,7 @@ def test_read_as_df_empty_response(mock_api):
 
 
 def test_aggregates_min_read(mock_api):
-    """Test AGG_MIN read type."""
+    """Test MIN read type."""
     # Mock SQL endpoint for aggregates query
     mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
         return_value=httpx.Response(
@@ -1153,7 +1153,7 @@ def test_aggregates_min_read(mock_api):
 
 
 def test_aggregates_max_read(mock_api):
-    """Test AGG_MAX read type."""
+    """Test MAX read type."""
     mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
         return_value=httpx.Response(
             200,
@@ -1218,7 +1218,7 @@ def test_aggregates_avg_read(mock_api):
 
 
 def test_aggregates_rng_read(mock_api):
-    """Test AGG_RNG (range) read type."""
+    """Test RNG (range) read type."""
     mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
         return_value=httpx.Response(
             200,
@@ -1283,18 +1283,15 @@ def test_aggregates_multiple_tags(mock_api):
     c.close()
 
 
-def test_aggregates_with_description(mock_api):
-    """Test aggregates with description field."""
-    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
+def test_aggregates_period_calculation(mock_api):
+    """Test that aggregates queries calculate period correctly in tenths of seconds."""
+    # Capture the actual request
+    route = mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL")
+    route.mock(
         return_value=httpx.Response(
             200,
             json=[
-                {
-                    "ts": "2025-01-01T00:00:00Z",
-                    "name": "TAG1",
-                    "name->ip_description": "Test Tag Description",
-                    "avg": 42.0,
-                },
+                {"ts": "2025-01-01T00:00:00Z", "name": "TAG1", "min": 10.5},
             ],
         )
     )
@@ -1306,7 +1303,8 @@ def test_aggregates_with_description(mock_api):
         datasource="IP21",
     )
 
-    result = c.read(
+    # Read with 24-hour period
+    c.read(
         ["TAG1"],
         start="2025-01-01 00:00:00",
         end="2025-01-02 00:00:00",
@@ -1315,8 +1313,20 @@ def test_aggregates_with_description(mock_api):
         output=OutputFormat.JSON,
     )
 
-    assert isinstance(result, list)
-    assert len(result) == 1
-    assert result[0]["description"] == "Test Tag Description"
-    assert result[0]["value"] == 42.0
+    # Verify the request was made
+    assert route.called
+    request = route.calls.last.request
+    request_body = request.content.decode("utf-8")
+
+    # Parse the XML to get the SQL
+    import xml.etree.ElementTree as ET
+
+    root = ET.fromstring(request_body)
+    sql_query = root.text
+
+    # Check that period is in tenths of seconds, not HH:MM format
+    # 24 hours = 24*60*60*10 = 864000 tenths of seconds
+    assert "period = 864000" in sql_query, f"Expected 'period = 864000' in SQL: {sql_query}"
+    assert "period = '24:00'" not in sql_query, f"Should not use HH:MM format: {sql_query}"
+
     c.close()
