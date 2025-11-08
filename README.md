@@ -24,8 +24,8 @@
 - **Hybrid search mode**: Search for tags and read their data in one call
 - Tag search with wildcards and description filtering
 - Unified interface for analog, discrete, and text tags
-- Support for RAW, INT, SNAPSHOT, AVG, and aggregate reader types (MIN, MAX, RNG)
-- **Aggregates queries**: Get min/max/range statistics over entire periods
+- Support for RAW, INT, SNAPSHOT, and aggregate reader types (AVG, MIN, MAX, RNG)
+- **Smart aggregates**: Query aggregates table with or without intervals for flexible period-based statistics
 - Pandas DataFrame or JSON output with optional status and description fields
 - Enum-based parameters for cleaner, type-safe API
 - Configurable row limits and query parameters
@@ -280,12 +280,16 @@ Data retrieval modes:
 - `ReaderType.RAW` - Raw data points as stored in historian
 - `ReaderType.INT` - Interpolated values at specified intervals (default)
 - `ReaderType.SNAPSHOT` - Current snapshot of tag values
-- `ReaderType.AVG` - Average values over specified intervals
+- `ReaderType.AVG` - Average values from aggregates table (with/without interval)
 - `ReaderType.MIN` - Minimum value over the period (from aggregates table)
 - `ReaderType.MAX` - Maximum value over the period (from aggregates table)
 - `ReaderType.RNG` - Range (max-min) over the period (from aggregates table)
 
-**Aggregates types** query the `aggregates` table with the period automatically calculated as `(end - start)` in tenths of seconds. For example, a 24-hour period becomes `864000` (24 × 60 × 60 × 10).
+**Aggregates types** (AVG, MIN, MAX, RNG) query the `aggregates` table with the period automatically calculated in tenths of seconds:
+- **Without interval**: `period = (end - start) * 10` → returns 1 aggregate value for entire range
+- **With interval**: `period = interval * 10` → returns multiple values (one per interval period)
+
+Example: A 24-hour period becomes `864000` tenths of seconds (24 × 60 × 60 × 10), while a 10-minute interval becomes `6000` (600 × 10).
 
 #### IncludeFields
 
@@ -307,26 +311,35 @@ Controls output format:
 ```python
 from aspy21 import AspenClient, IncludeFields, OutputFormat, ReaderType
 
-# Read average values over intervals
+# AVG with interval: returns multiple average values (one per interval)
 df = client.read(
     ["TAG1", "TAG2"],
     start="2025-01-01 00:00:00",
     end="2025-01-01 01:00:00",
     read_type=ReaderType.AVG,
-    interval=600,  # 10-minute averages
+    interval=600,  # 10-minute averages - returns 6 values (60min / 10min)
     include=IncludeFields.ALL,
     output=OutputFormat.DATAFRAME
 )
 
-# Read aggregate statistics for entire period
-aggregates = client.read(
+# AVG without interval: returns single aggregate value for entire period
+avg_value = client.read(
     ["TAG1"],
     start="2025-01-01 00:00:00",
     end="2025-01-02 00:00:00",
-    read_type=ReaderType.MIN,  # Get minimum value over 24 hours
+    read_type=ReaderType.AVG,  # Single average over 24 hours
     output=OutputFormat.JSON
 )
-# Returns: [{"timestamp": "...", "tag": "TAG1", "value": 10.5}]
+# Returns: [{"timestamp": "...", "tag": "TAG1", "value": 42.5}]
+
+# Other aggregates (MIN/MAX/RNG) work the same way
+min_value = client.read(
+    ["TAG1"],
+    start="2025-01-01 00:00:00",
+    end="2025-01-02 00:00:00",
+    read_type=ReaderType.MIN,  # Minimum value over 24 hours
+    output=OutputFormat.JSON
+)
 ```
 
 ---

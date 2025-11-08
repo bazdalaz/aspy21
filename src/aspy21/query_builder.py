@@ -236,6 +236,7 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
         end: str,
         datasource: str,
         read_type: ReaderType,
+        interval: int | None = None,
         with_description: bool = False,
         include_status: bool = False,
     ) -> str:
@@ -258,12 +259,16 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
         # Convert tags to list if string
         tags_list = [tags] if isinstance(tags, str) else tags
 
-        # Calculate period as end - start in tenths of seconds
-        # Aspen aggregates table expects period in tenths of seconds
-        start_dt = pd.to_datetime(start)
-        end_dt = pd.to_datetime(end)
-        period_seconds = int((end_dt - start_dt).total_seconds())
-        period_tenths = period_seconds * 10  # Convert to tenths of seconds
+        # Calculate period in tenths of seconds
+        # - If interval provided: period = interval * 10 (returns multiple values)
+        # - If no interval: period = (end - start) * 10 (returns single value)
+        if interval:
+            period_tenths = interval * 10
+        else:
+            start_dt = pd.to_datetime(start)
+            end_dt = pd.to_datetime(end)
+            period_seconds = int((end_dt - start_dt).total_seconds())
+            period_tenths = period_seconds * 10
 
         # Map ReaderType to SQL column name
         agg_column_map = {

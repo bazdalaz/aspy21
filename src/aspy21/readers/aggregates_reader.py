@@ -42,7 +42,7 @@ class AggregatesReader(BaseReader):
         """Check if this reader handles aggregates reads."""
         from ..models import ReaderType as RT
 
-        # Handle aggregate reads with datasource configured
+        # Handle aggregate reads (MIN, MAX, AVG, RNG) with datasource configured
         return (
             read_type in (RT.MIN, RT.MAX, RT.AVG, RT.RNG)
             and bool(self.datasource)
@@ -77,7 +77,12 @@ class AggregatesReader(BaseReader):
             Tuple of (list of DataFrames for each tag, dict of tag descriptions)
         """
         logger.debug(f"Using SQL aggregates endpoint for {read_type.value} read")
-        logger.debug(f"Querying {len(tags)} tag(s) with period from {start} to {end}")
+        if interval:
+            logger.debug(
+                f"Querying {len(tags)} tag(s) with interval {interval}s from {start} to {end}"
+            )
+        else:
+            logger.debug(f"Querying {len(tags)} tag(s) with period from {start} to {end}")
 
         assert start is not None
         assert end is not None
@@ -89,6 +94,7 @@ class AggregatesReader(BaseReader):
             end=end,
             datasource=self.datasource,
             read_type=read_type,
+            interval=interval,
             with_description=with_description,
             include_status=False,  # Not supported for aggregates
         )
