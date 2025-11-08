@@ -5,6 +5,7 @@ A high-performance REST API client for accessing Aspen process data
 with pandas DataFrame output and flexible batching.
 """
 
+from .cache import AspenCache, CacheConfig
 from .client import AspenClient, configure_logging
 from .models import IncludeFields, OutputFormat, ReaderType
 
@@ -16,6 +17,8 @@ except ImportError:
 
 __all__ = [
     "AspenClient",
+    "AspenCache",
+    "CacheConfig",
     "ReaderType",
     "IncludeFields",
     "OutputFormat",
