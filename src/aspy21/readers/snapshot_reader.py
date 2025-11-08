@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from ..query_builder import build_snapshot_sql_query
+from ..query_builder import SqlSnapshotQueryBuilder
 from .base_reader import BaseReader
 from .response_parser import SqlSnapshotResponseParser
 
@@ -64,7 +64,8 @@ class SnapshotReader(BaseReader):
 
         logger.info(f"Reading {len(tags)} tag(s) snapshot values")
 
-        xml_query = build_snapshot_sql_query(
+        builder = SqlSnapshotQueryBuilder()
+        xml_query = builder.build(
             tags=tags,
             datasource=self.datasource,
             with_description=with_description,

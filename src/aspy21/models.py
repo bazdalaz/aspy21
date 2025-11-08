@@ -10,18 +10,19 @@ class ReaderType(str, Enum):
         RAW: Raw data points as stored in the historian
         INT: Interpolated values at specified intervals
         SNAPSHOT: Current snapshot of tag values
-        AVG: Average values over specified intervals
+
         MIN: Minimum value over the period (from aggregates table)
         MAX: Maximum value over the period (from aggregates table)
+        AVG: Average value over the period (from aggregates table)
         RNG: Range (max-min) over the period (from aggregates table)
     """
 
     RAW = "RAW"
     INT = "INT"
     SNAPSHOT = "SNAPSHOT"
-    AVG = "AVG"
     MIN = "MIN"
     MAX = "MAX"
+    AVG = "AVG"
     RNG = "RNG"
 
 
