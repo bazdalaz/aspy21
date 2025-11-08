@@ -32,12 +32,12 @@ This directory contains example scripts demonstrating how to use aspy21.
 
 ### basic_usage.py
 
-Basic example showing how to:
-- Load configuration from `.env` file
-- Configure logging
+Basic example demonstrating core functionality:
+- Load configuration from `.env` file using python-dotenv
+- Configure logging from environment variable
 - Connect to Aspen IP.21 with Basic Authentication
-- Read historical data for a tag
-- Handle errors
+- Read historical data for tags over a time range
+- Error handling and connection management
 
 **Run:**
 ```bash
@@ -45,38 +45,31 @@ python examples/basic_usage.py
 ```
 
 **What it does:**
-- Reads configuration from `.env`
-- Configures logging based on `ASPEN_LOG_LEVEL`
-- Connects to your Aspen server
-- Retrieves RAW data for a tag over a time range
-- Prints the results as a pandas DataFrame
+- Loads environment variables from `.env` file
+- Configures logging level based on `ASPEN_LOG_LEVEL`
+- Creates an AspenClient with context manager (auto-cleanup)
+- Reads test tags specified in `ASPEN_TEST_TAGS` environment variable
+- Retrieves data for 1-hour period (1-NOV-25 8:00-9:00)
+- Outputs results as a pandas DataFrame
+- Demonstrates proper error handling with try/except
 
-### search_tags.py
-
-Demonstrates tag search functionality:
-- Search by tag name pattern with wildcards (`*` and `?`)
-- Search by description
-- Combine multiple filters
-- Case-insensitive matching
-
-**Run:**
-```bash
-python examples/search_tags.py
-```
-
-**What it does:**
-- Shows various wildcard patterns (`TEMP*`, `AI_10?`, etc.)
-- Searches by description keywords
-- Demonstrates combined tag + description filtering
-- Lists matching tags with their descriptions
+**Environment variables used:**
+- `ASPEN_BASE_URL` - Server endpoint URL
+- `ASPEN_USERNAME` - Username for authentication
+- `ASPEN_PASSWORD` - Password for authentication
+- `ASPEN_DATASOURCE` - Datasource name (optional, uses server default if empty)
+- `ASPEN_TIMEOUT` - Request timeout in seconds (default: 60.0)
+- `ASPEN_VERIFY_SSL` - SSL certificate verification (default: False)
+- `ASPEN_LOG_LEVEL` - Logging level (INFO, DEBUG, etc.)
+- `ASPEN_TEST_TAGS` - Comma-separated list of tag names to read
 
 ### search_and_read.py
 
-Demonstrates how to search for tags and then read their historical data:
-- Search with `return_desc=False` to get tag names for reading
-- Search with descriptions then extract names
-- Filter search results before reading
-- Read data for dynamically discovered tags
+Comprehensive example demonstrating tag search and hybrid mode:
+- Search-only mode: find tags then read separately
+- Hybrid mode: search and read in a single operation
+- Multiple search patterns and filters
+- Different reader types and intervals
 
 **Run:**
 ```bash
@@ -84,10 +77,32 @@ python examples/search_and_read.py
 ```
 
 **What it does:**
-- Shows 4 different workflows for search → read
-- Demonstrates `return_desc=False` for clean tag name lists
-- Shows how to filter and select specific tags
-- Reads historical data for found tags with different reader types
+- **Example 1**: Search for tags matching pattern, get tag names, then read data separately
+  - Uses `include=IncludeFields.NONE` to return `list[str]` of tag names
+  - Reads 1 hour of raw data for found tags
+  
+- **Example 2**: Hybrid mode with tag pattern search
+  - Uses tag pattern `NAI*` to search for tags
+  - Reads interpolated data with 10-minute intervals in single operation
+  - Demonstrates `read_type=ReaderType.INT` with `interval=600`
+  
+- **Example 3**: Hybrid mode with description filter
+  - Searches by description keyword `V1-01`
+  - Reads interpolated data with 1-hour intervals
+  - Shows how to combine search filters with data reading
+  
+- **Example 4**: Search broadly, filter results, then read
+  - Searches with broad pattern and description filter
+  - Uses `include=IncludeFields.DESCRIPTION` to get tag metadata
+  - Filters results programmatically (selects TI/PI tags only)
+  - Reads raw data for filtered tag subset
+
+**Key concepts demonstrated:**
+- `IncludeFields.NONE` - Returns `list[str]` of tag names only
+- `IncludeFields.DESCRIPTION` - Returns `list[dict[str, str]]` with name + description
+- Hybrid mode - Combines search and read in one call (when `start`/`end` provided)
+- Different reader types: `RAW`, `INT` (interpolated)
+- Interval-based reads for aggregated/interpolated data
 
 ## Creating Your Own Scripts
 
@@ -97,25 +112,23 @@ from aspy21 import AspenClient, ReaderType, configure_logging
 # Optional: configure logging
 configure_logging("INFO")
 
-# Connect to Aspen
-client = AspenClient(
+# Connect to Aspen using context manager (recommended)
+with AspenClient(
     base_url="http://your-server/ProcessData/AtProcessDataREST.dll",
-    username="your-username",
-    password="your-password",
-    datasource="your-datasource",  # Optional
-)
-
-# Read data
-df = client.read(
-    tags=["TAG1", "TAG2"],
-    start="2025-01-01 00:00:00",
-    end="2025-01-01 01:00:00",
-    read_type=ReaderType.RAW,
-    max_rows=100000,  # Optional, default: 100000
-)
-
-print(df)
-client.close()
+    auth=("your-username", "your-password"),
+    datasource="IP21",  # Required for historical reads
+) as client:
+    # Read data
+    df = client.read(
+        tags=["TAG1", "TAG2"],
+        start="2025-01-01 00:00:00",
+        end="2025-01-01 01:00:00",
+        read_type=ReaderType.RAW,
+        max_rows=100000,  # Optional, default: 100000
+    )
+    
+    print(df)
+    # Connection automatically closed at end of 'with' block
 ```
 
 ## Reader Types
@@ -140,21 +153,30 @@ df = client.read(
 
 ## Searching for Tags
 
-**Note**: `search()` requires:
-- `tag` parameter (use `"*"` to search all tags)
-- `datasource` must be configured in AspenClient
+**Note**: `search()` requires `datasource` to be configured in AspenClient
 
 ```python
+from aspy21 import IncludeFields
+
 # Search by tag name pattern (wildcards: * and ?)
+# Default: returns list[str] of tag names only
 tags = client.search(tag="TEMP*")  # All tags starting with TEMP
+# Returns: ['TEMP01', 'TEMP02', 'TEMP_REACTOR', ...]
 
-# Search all tags by description
-tags = client.search(tag="*", description="pressure")  # All tags with "pressure" in description
+# Search with descriptions - returns list of dicts
+tags = client.search(tag="TEMP*", include=IncludeFields.DESCRIPTION)
+# Returns: [{'name': 'TEMP01', 'description': 'Temperature sensor 1'}, ...]
 
-# Combine filters
-tags = client.search(tag="AI_1*", description="reactor")
+# Search all tags by description keyword
+tags = client.search(description="pressure", include=IncludeFields.DESCRIPTION)
 
-# Results are list of dicts
+# Combine tag pattern and description filters
+tags = client.search(tag="AI_1*", description="reactor", include=IncludeFields.DESCRIPTION)
+
+# Process results with descriptions
 for tag in tags:
     print(f"{tag['name']}: {tag['description']}")
+
+# Use BOTH to get all available fields (name, description, maptype)
+tags = client.search(tag="*", limit=10, include=IncludeFields.BOTH)
 ```

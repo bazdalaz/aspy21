@@ -5,7 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from aspy21 import AspenClient, OutputFormat, ReaderType, configure_logging
+from aspy21 import AspenClient, OutputFormat, configure_logging
 
 # Load .env from project root
 env_path = Path(__file__).parent.parent / ".env"
@@ -25,6 +25,7 @@ username = os.getenv("ASPEN_USERNAME")
 password = os.getenv("ASPEN_PASSWORD")
 datasource = os.getenv("ASPEN_DATASOURCE", "")
 timeout = float(os.getenv("ASPEN_TIMEOUT", "60.0"))
+test_tags = os.getenv("ASPEN_TEST_TAGS", "").split(",")
 verify_ssl = os.getenv("ASPEN_VERIFY_SSL", "False").lower() == "true"
 
 # Validate required variables
@@ -33,6 +34,8 @@ if not all([base_url, username, password]):
     print("Required: ASPEN_BASE_URL, ASPEN_USERNAME, ASPEN_PASSWORD")
     print("Please create .env file from .env.example")
     exit(1)
+
+print(test_tags)
 
 # Type narrowing: assert non-None after validation
 assert base_url is not None
@@ -48,10 +51,10 @@ print(f"Datasource: {datasource or '(server default)'}\n")
 print("Client initialized with Basic Auth\n")
 
 try:
-    # Replace with your actual tag name
-    test_tag = "YOUR_TAG_NAME"
-    print(f"Reading tag: {test_tag}")
-    print("Time range: 2025-06-20T08:00:00 to 2025-06-20T09:00:00\n")
+    # Replace with your actual tag names (here we're reading from .env)
+    # test_tags = ["YOUR_TAG_NAME_1", "YOUR_TAG_NAME_2"]
+    print(f"Reading tags: {test_tags}")
+    print("Time range: '1-NOV-25 8:00:00 to 1-NOV-25 9:00:00\n")
 
     # Using 'with' statement ensures connection is properly closed
     with AspenClient(
@@ -62,11 +65,11 @@ try:
         verify_ssl=verify_ssl,
     ) as client:
         df = client.read(
-            [test_tag],
-            start="2025-06-20T08:00:00",
-            end="2025-06-20T09:00:00",
-            read_type=ReaderType.RAW,
-            output=OutputFormat.JSON,
+            test_tags,
+            start="1-NOV-25 8:00:00",
+            end="1-NOV-25 9:00:00",
+            # read_type=ReaderType.RAW,
+            output=OutputFormat.DATAFRAME,
         )
 
         print("\n" + "=" * 80)

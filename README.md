@@ -30,8 +30,7 @@
 - Enum-based parameters for cleaner, type-safe API
 - Configurable row limits and query parameters
 - Built-in retry logic with exponential backoff
-- **Built-in caching**: Optional caching layer with TTL and LRU eviction to reduce API load
-- Type-annotated and fully tested (87% coverage)
+- Type-annotated and fully tested (88% coverage)
 
 ### Use Cases
 
@@ -69,7 +68,8 @@ from aspy21 import AspenClient, OutputFormat, ReaderType
 # Initialize client using context manager (recommended)
 with AspenClient(
     base_url="https://aspen.myplant.local/ProcessData",
-    auth=("user", "password")
+    auth=("user", "password"),
+    datasource="IP21"  # Required for historical reads
 ) as client:
     # Read historical data
     df = client.read(
@@ -87,6 +87,267 @@ with AspenClient(
 
 ---
 
+## Usage Examples
+
+### Reading Aggregates Data
+
+The aggregates reader types (AVG, MIN, MAX, RNG) query the IP.21 aggregates table for period-based statistics.
+
+#### Average Values Over Time Intervals
+
+```python
+from aspy21 import AspenClient, ReaderType, OutputFormat
+
+with AspenClient(
+    base_url="https://aspen.example.com/ProcessData",
+    auth=("user", "password"),
+    datasource="IP21"
+) as client:
+    # Get 10-minute averages for a 1-hour period
+    df = client.read(
+        ["REACTOR_TEMP", "REACTOR_PRESSURE"],
+        start="2025-01-15 08:00:00",
+        end="2025-01-15 09:00:00",
+        interval=600,  # 10 minutes (600 seconds)
+        read_type=ReaderType.AVG,
+        output=OutputFormat.DATAFRAME
+    )
+    # Returns 6 rows (one average per 10-minute interval)
+    print(df)
+```
+
+#### Single Aggregate Value for Entire Period
+
+```python
+# Get a single average value over 24 hours (no interval)
+with AspenClient(
+    base_url="https://aspen.example.com/ProcessData",
+    auth=("user", "password"),
+    datasource="IP21"
+) as client:
+    data = client.read(
+        ["REACTOR_TEMP"],
+        start="2025-01-15 00:00:00",
+        end="2025-01-16 00:00:00",
+        read_type=ReaderType.AVG,  # No interval specified
+        output=OutputFormat.JSON
+    )
+    # Returns: [{"timestamp": "...", "tag": "REACTOR_TEMP", "value": 285.4}]
+    print(f"24-hour average: {data[0]['value']}")
+```
+
+#### Minimum and Maximum Values
+
+```python
+# Find daily min/max temperatures
+with AspenClient(
+    base_url="https://aspen.example.com/ProcessData",
+    auth=("user", "password"),
+    datasource="IP21"
+) as client:
+    # Minimum values per hour
+    min_df = client.read(
+        ["REACTOR_TEMP"],
+        start="2025-01-15 00:00:00",
+        end="2025-01-16 00:00:00",
+        interval=3600,  # 1 hour
+        read_type=ReaderType.MIN,
+        output=OutputFormat.DATAFRAME
+    )
+
+    # Maximum values per hour
+    max_df = client.read(
+        ["REACTOR_TEMP"],
+        start="2025-01-15 00:00:00",
+        end="2025-01-16 00:00:00",
+        interval=3600,
+        read_type=ReaderType.MAX,
+        output=OutputFormat.DATAFRAME
+    )
+
+    print(f"Hourly minimums:\n{min_df}")
+    print(f"Hourly maximums:\n{max_df}")
+```
+
+#### Range (Max - Min) Values
+
+```python
+# Calculate hourly temperature ranges (variability)
+with AspenClient(
+    base_url="https://aspen.example.com/ProcessData",
+    auth=("user", "password"),
+    datasource="IP21"
+) as client:
+    df = client.read(
+        ["REACTOR_TEMP", "COLUMN_TEMP"],
+        start="2025-01-15 00:00:00",
+        end="2025-01-15 12:00:00",
+        interval=3600,  # 1 hour
+        read_type=ReaderType.RNG,  # Range = Max - Min
+        output=OutputFormat.DATAFRAME
+    )
+    # Shows temperature variability over each hour
+    print(df)
+```
+
+#### Combining Multiple Aggregate Types
+
+```python
+# Get comprehensive statistics for a process variable
+with AspenClient(
+    base_url="https://aspen.example.com/ProcessData",
+    auth=("user", "password"),
+    datasource="IP21"
+) as client:
+    tag = "REACTOR_TEMP"
+    period_start = "2025-01-15 08:00:00"
+    period_end = "2025-01-15 16:00:00"
+
+    # Get all statistics for 1-hour intervals
+    avg = client.read([tag], start=period_start, end=period_end,
+                      interval=3600, read_type=ReaderType.AVG)
+    min_vals = client.read([tag], start=period_start, end=period_end,
+                           interval=3600, read_type=ReaderType.MIN)
+    max_vals = client.read([tag], start=period_start, end=period_end,
+                           interval=3600, read_type=ReaderType.MAX)
+    rng = client.read([tag], start=period_start, end=period_end,
+                      interval=3600, read_type=ReaderType.RNG)
+
+    # Combine into analysis
+    import pandas as pd
+    stats = pd.DataFrame({
+        'avg': [d['value'] for d in avg],
+        'min': [d['value'] for d in min_vals],
+        'max': [d['value'] for d in max_vals],
+        'range': [d['value'] for d in rng],
+    })
+    print(stats)
+```
+
+### Reading Raw and Interpolated Data
+
+```python
+# Raw historical data (as stored in historian)
+with AspenClient(
+    base_url="https://aspen.example.com/ProcessData",
+    auth=("user", "password"),
+    datasource="IP21"
+) as client:
+    raw_df = client.read(
+        ["FLOW_101", "LEVEL_205"],
+        start="2025-01-15 08:00:00",
+        end="2025-01-15 09:00:00",
+        read_type=ReaderType.RAW,
+        output=OutputFormat.DATAFRAME
+    )
+    print(f"Raw data points: {len(raw_df)}")
+
+    # Interpolated data at regular intervals
+    int_df = client.read(
+        ["FLOW_101", "LEVEL_205"],
+        start="2025-01-15 08:00:00",
+        end="2025-01-15 09:00:00",
+        interval=60,  # 1-minute intervals
+        read_type=ReaderType.INT,
+        output=OutputFormat.DATAFRAME
+    )
+    print(f"Interpolated data points: {len(int_df)}")
+```
+
+### Snapshot (Current Values)
+
+```python
+# Get current values for multiple tags
+with AspenClient(
+    base_url="https://aspen.example.com/ProcessData",
+    auth=("user", "password"),
+    datasource="IP21"
+) as client:
+    # Method 1: Explicit SNAPSHOT read type
+    df = client.read(
+        ["TEMP_101", "PRESSURE_102", "FLOW_103"],
+        read_type=ReaderType.SNAPSHOT,
+        output=OutputFormat.DATAFRAME
+    )
+
+    # Method 2: Omit start/end (defaults to SNAPSHOT)
+    df = client.read(
+        ["TEMP_101", "PRESSURE_102", "FLOW_103"],
+        output=OutputFormat.DATAFRAME
+    )
+
+    print(df)
+```
+
+### Search and Read (Hybrid Mode)
+
+```python
+# Search for tags and read their data in one call
+with AspenClient(
+    base_url="https://aspen.example.com/ProcessData",
+    auth=("user", "password"),
+    datasource="IP21"
+) as client:
+    # Find all reactor temperature tags and get hourly averages
+    df = client.search(
+        tag="REACTOR_*_TEMP",
+        start="2025-01-15 00:00:00",
+        end="2025-01-16 00:00:00",
+        interval=3600,
+        read_type=ReaderType.AVG,
+        output=OutputFormat.DATAFRAME
+    )
+    print(f"Found and read data for {len(df.columns)} tags")
+    print(df)
+```
+
+### Including Status and Descriptions
+
+```python
+from aspy21 import IncludeFields
+
+with AspenClient(
+    base_url="https://aspen.example.com/ProcessData",
+    auth=("user", "password"),
+    datasource="IP21"
+) as client:
+    # Include quality status codes
+    df = client.read(
+        ["REACTOR_TEMP"],
+        start="2025-01-15 08:00:00",
+        end="2025-01-15 09:00:00",
+        interval=600,
+        read_type=ReaderType.AVG,
+        include=IncludeFields.STATUS,
+        output=OutputFormat.DATAFRAME
+    )
+    # DataFrame includes REACTOR_TEMP and REACTOR_TEMP_status columns
+
+    # Include descriptions
+    df = client.read(
+        ["REACTOR_TEMP"],
+        start="2025-01-15 08:00:00",
+        end="2025-01-15 09:00:00",
+        interval=600,
+        read_type=ReaderType.AVG,
+        include=IncludeFields.DESCRIPTION,
+        output=OutputFormat.DATAFRAME
+    )
+
+    # Include both status and descriptions
+    df = client.read(
+        ["REACTOR_TEMP"],
+        start="2025-01-15 08:00:00",
+        end="2025-01-15 09:00:00",
+        interval=600,
+        read_type=ReaderType.AVG,
+        include=IncludeFields.ALL,
+        output=OutputFormat.DATAFRAME
+    )
+```
+
+---
+
 ## Authentication
 
 ### HTTP Basic Authentication
@@ -94,7 +355,8 @@ with AspenClient(
 ```python
 with AspenClient(
     base_url="https://aspen.example.com/ProcessData",
-    auth=("user", "password")
+    auth=("user", "password"),
+    datasource="IP21"  # Required for historical reads
 ) as client:
     # Your code here
     pass
@@ -106,7 +368,8 @@ For public or internal endpoints:
 
 ```python
 with AspenClient(
-    base_url="http://aspen.example.com/ProcessData"
+    base_url="http://aspen.example.com/ProcessData",
+    datasource="IP21"  # Required for historical reads
 ) as client:
     # Your code here
     pass
@@ -539,7 +802,8 @@ import httpx
 try:
     with AspenClient(
         base_url="https://aspen.example.com/ProcessData",
-        auth=("user", "password")
+        auth=("user", "password"),
+        datasource="IP21"
     ) as client:
         df = client.read(
             ["ATI111"],
@@ -615,7 +879,7 @@ Contributions are welcome. Please ensure:
 1. All tests pass (`pytest`)
 2. Code is formatted (`ruff format`)
 3. Type checking passes (`pyright`)
-4. Coverage remains above 75%
+4. Coverage remains above 85%
 
 ---
 

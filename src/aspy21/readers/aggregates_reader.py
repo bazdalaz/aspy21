@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from ..query_builder import build_aggregates_sql_query
+from ..query_builder import SqlAggregatesQueryBuilder
 from .base_reader import BaseReader
 from .response_parser import SqlAggregatesResponseParser
 
@@ -67,7 +67,7 @@ class AggregatesReader(BaseReader):
             tags: List of tag names
             start: Start timestamp
             end: End timestamp
-            interval: Interval in seconds for period calculation. If None, period = (end - start)
+            interval: Not used for aggregates (period is calculated from start/end)
             read_type: Type of aggregation (MIN, MAX, AVG, RNG)
             include_status: Not supported for aggregates (ignored)
             max_rows: Maximum rows (not typically applicable for aggregates)
@@ -87,7 +87,8 @@ class AggregatesReader(BaseReader):
         assert start is not None
         assert end is not None
 
-        xml_query = build_aggregates_sql_query(
+        builder = SqlAggregatesQueryBuilder()
+        xml_query = builder.build(
             tags=tags,
             start=start,
             end=end,
@@ -102,23 +103,32 @@ class AggregatesReader(BaseReader):
         logger.debug(f"POST {sql_url}")
         logger.debug(f"SQL query XML: {xml_query}")
 
-        response = self.http_client.post(
-            sql_url, content=xml_query, headers={"Content-Type": "text/xml"}
-        )
-        response.raise_for_status()
+        try:
+            response = self.http_client.post(
+                sql_url, content=xml_query, headers={"Content-Type": "text/xml"}
+            )
+            response.raise_for_status()
 
-        logger.debug(f"Response status: {response.status_code}")
-        logger.debug(f"Response headers: {dict(response.headers)}")
-        logger.debug(f"Response content-type: {response.headers.get('content-type', 'unknown')}")
-        logger.debug(f"Response text (first 1000 chars): {response.text[:1000]}")
+            logger.debug(f"Response status: {response.status_code}")
+            logger.debug(f"Response headers: {dict(response.headers)}")
+            logger.debug(
+                f"Response content-type: {response.headers.get('content-type', 'unknown')}"
+            )
+            logger.debug(f"Response text (first 1000 chars): {response.text[:1000]}")
+
+        except Exception as e:
+            logger.error(f"HTTP request failed: {type(e).__name__}: {e}")
+            raise
 
         # Parse response as JSON
         try:
             response_data = response.json()
             logger.debug(f"Parsed JSON type: {type(response_data)}")
+            keys = response_data.keys() if isinstance(response_data, dict) else "N/A"
+            logger.debug(f"Parsed JSON keys (if dict): {keys}")
             logger.debug(f"Parsed JSON content: {response_data}")
         except Exception as e:
-            logger.error(f"Failed to parse response as JSON: {e}")
+            logger.error(f"Failed to parse response as JSON: {type(e).__name__}: {e}")
             logger.error(f"Response text: {response.text[:2000]}")
             raise
 

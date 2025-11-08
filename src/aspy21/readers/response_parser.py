@@ -282,7 +282,7 @@ class SqlAggregatesResponseParser(ResponseParser):
 
     def parse(
         self,
-        response: list[dict],
+        response: dict | list,
         tag_names: list[str],
         value_column: str,  # "min", "max", "avg", or "rng"
         max_rows: int,
@@ -290,7 +290,7 @@ class SqlAggregatesResponseParser(ResponseParser):
         """Parse SQL aggregates response.
 
         Args:
-            response: SQL query response as list of records
+            response: SQL query response (can be dict with "data" wrapper or list of records)
             tag_names: List of tag names to extract
             value_column: Name of the value column (min, max, avg, or rng)
             max_rows: Maximum rows per tag (0 = unlimited)
@@ -303,45 +303,158 @@ class SqlAggregatesResponseParser(ResponseParser):
         try:
             logger.debug("SqlAggregatesResponseParser.parse called")
             logger.debug(f"Response type: {type(response)}")
-            logger.debug(f"Response content: {response}")
+            keys = response.keys() if isinstance(response, dict) else "N/A"
+            logger.debug(f"Response keys (if dict): {keys}")
+            logger.debug(f"Response content (first 500 chars): {str(response)[:500]}")
             logger.debug(f"Tag names: {tag_names}")
             logger.debug(f"Value column: {value_column}")
 
             if not response:
-                logger.warning("No data in SQL aggregates response")
+                logger.warning("Empty SQL aggregates response")
+                return [], {}
+
+            # Handle SQL response format: {"data": [{"cols": [...], "rows": [...]}]}
+            records = []
+            if isinstance(response, dict):
+                logger.debug("Response is dict, extracting 'data' field")
+                if "data" not in response:
+                    logger.error(
+                        f"Response dict has no 'data' field. Keys: {list(response.keys())}"
+                    )
+                    return [], {}
+
+                data_array = response["data"]
+                length = len(data_array) if isinstance(data_array, list) else "N/A"
+                logger.debug(f"data_array type: {type(data_array)}, length: {length}")
+
+                if not isinstance(data_array, list) or not data_array:
+                    logger.error("Invalid or empty 'data' array in response")
+                    return [], {}
+
+                # Get first result set
+                result_set = data_array[0]
+                logger.debug(f"result_set type: {type(result_set)}")
+                keys = result_set.keys() if isinstance(result_set, dict) else "N/A"
+                logger.debug(f"result_set keys (if dict): {keys}")
+
+                if not isinstance(result_set, dict):
+                    logger.error(f"result_set is not a dict: {type(result_set)}")
+                    return [], {}
+
+                # Check for errors
+                if "result" in result_set:
+                    result = result_set["result"]
+                    if isinstance(result, dict) and result.get("er", 0) != 0:
+                        error_msg = result.get("es", "Unknown error")
+                        logger.error(f"API error in aggregates response: {error_msg}")
+                        return [], {}
+
+                # Extract column definitions and row data
+                cols = result_set.get("cols", [])
+                rows = result_set.get("rows", [])
+
+                logger.debug(f"Found {len(cols)} columns and {len(rows)} rows")
+                logger.debug(f"Column definitions: {cols}")
+
+                if not cols or not rows:
+                    logger.warning("No columns or rows in SQL aggregates response")
+                    return [], {}
+
+                # Build column name mapping from index to name
+                col_map = {}
+                for col in cols:
+                    if isinstance(col, dict) and "i" in col and "n" in col:
+                        col_map[col["i"]] = col["n"]
+
+                logger.debug(f"Column mapping: {col_map}")
+
+                # Convert rows to list of dicts
+                for row_idx, row in enumerate(rows):
+                    if not isinstance(row, dict) or "fld" not in row:
+                        logger.warning(f"Row {row_idx} has invalid structure: {row}")
+                        continue
+
+                    fields = row["fld"]
+                    record = {}
+
+                    for field in fields:
+                        if isinstance(field, dict) and "i" in field and "v" in field:
+                            field_idx = field["i"]
+                            field_value = field["v"]
+                            if field_idx in col_map:
+                                record[col_map[field_idx]] = field_value
+
+                    if record:
+                        records.append(record)
+                        logger.debug(f"Row {row_idx} record: {record}")
+
+                logger.debug(f"Extracted {len(records)} records from SQL response")
+
+            elif isinstance(response, list):
+                logger.debug("Response is already a list of records")
+                records = response
+            else:
+                logger.error(f"Unexpected response type: {type(response)}")
+                return [], {}
+
+            if not records:
+                logger.warning("No records extracted from SQL aggregates response")
                 return [], {}
 
             # Group records by tag name
             tag_records: dict[str, list[dict]] = defaultdict(list)
             tag_descriptions: dict[str, str] = {}
 
-            for i, record in enumerate(response):
-                logger.debug(f"Processing record {i}: type={type(record)}, content={record}")
-                tag_name = record.get("name")
+            for i, record in enumerate(records):
+                logger.debug(f"Processing record {i}: {record}")
+
+                # Tag name might be in different fields depending on query structure
+                tag_name = record.get("name") or record.get("ip_tag_name")
                 if not tag_name:
-                    logger.warning(f"Record {i} has no 'name' field")
+                    logger.warning(f"Record {i} has no tag name field: {list(record.keys())}")
                     continue
 
                 tag_records[tag_name].append(record)
 
-                # Extract description from first record of each tag
-                if tag_name not in tag_descriptions and "name->ip_description" in record:
-                    tag_descriptions[tag_name] = record["name->ip_description"] or ""
+                # Extract description if available
+                desc_field = record.get("name->ip_description") or record.get("ip_description")
+                if tag_name not in tag_descriptions and desc_field:
+                    tag_descriptions[tag_name] = desc_field or ""
+
+            logger.debug(f"Grouped records into {len(tag_records)} tags")
 
             # Build DataFrame for each tag
             frames = []
             for tag_name in tag_names:
-                records = tag_records.get(tag_name, [])
+                records_for_tag = tag_records.get(tag_name, [])
 
-                if not records:
+                if not records_for_tag:
                     logger.warning(f"No data in SQL aggregates response for tag {tag_name}")
                     continue
 
+                logger.debug(
+                    f"Building DataFrame for {tag_name} with {len(records_for_tag)} records"
+                )
+
                 # Build DataFrame from records
                 rows = []
-                for record in records:
-                    timestamp = pd.to_datetime(record["ts"])
-                    value = record[value_column]  # Use the specified column name
+                for record in records_for_tag:
+                    # Timestamp might be in different fields
+                    ts_value = record.get("ts") or record.get("ip_trend_time")
+                    if ts_value is None:
+                        logger.warning(f"Record missing timestamp: {record}")
+                        continue
+
+                    timestamp = pd.to_datetime(ts_value)
+
+                    # Value column might have prefix
+                    value = record.get(value_column) or record.get(f"ip_{value_column}")
+                    if value is None:
+                        logger.warning(
+                            f"Record missing value column '{value_column}': {list(record.keys())}"
+                        )
+                        continue
+
                     row = {"time": timestamp, tag_name: value}
                     rows.append(row)
 
@@ -351,11 +464,15 @@ class SqlAggregatesResponseParser(ResponseParser):
                     if max_rows > 0:
                         df = df.iloc[:max_rows]
                     frames.append(df)
-                    logger.debug(f"Parsed {len(df)} aggregate records for tag {tag_name}")
+                    logger.info(f"Parsed {len(df)} aggregate records for tag {tag_name}")
+                else:
+                    logger.warning(f"No valid rows extracted for tag {tag_name}")
 
+            logger.info(f"Successfully parsed {len(frames)} DataFrames from aggregates response")
             return frames, tag_descriptions
 
         except Exception as e:
-            logger.error(f"Error parsing SQL aggregates response: {e}")
+            logger.error(f"Error parsing SQL aggregates response: {type(e).__name__}: {e}")
+            logger.exception("Full traceback:")
             logger.debug(f"Response was: {response}")
             return [], {}

@@ -42,6 +42,13 @@ Thumbs.db
 # Development context (contains session-specific info)
 CLAUDE.md
 WORKFLOW.md
+.claude/
 
 # Auto-generated version file
 src/aspy21/_version.py
+
+# coverage
+.coverage
+.coverage.xml
+.coverage.xml.gz
+coverage.json

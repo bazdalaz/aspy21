@@ -48,10 +48,10 @@ try:
         # Example 1: Search and read separately
         print("Example 1: Search for tags and read their data separately")
         print("-" * 80)
-        print("Searching for temperature tags...")
+        print("Searching for GFI tags...")
 
         # Get list of tag names matching pattern (default include=NONE returns list[str])
-        tag_names_result = client.search("TEMP*", limit=5)
+        tag_names_result = client.search("GFI*", limit=5)
         # Type narrowing: include=NONE guarantees list[str]
         assert isinstance(tag_names_result, list) and (
             not tag_names_result or isinstance(tag_names_result[0], str)
@@ -63,9 +63,9 @@ try:
             print("\nReading last hour of data...")
             result = client.read(
                 tag_names,
-                start="2025-01-31 08:00:00",
-                end="2025-01-31 09:00:00",
-                read_type=ReaderType.RAW,
+                start="1-NOV-25 8:00:00",
+                end="1-NOV-25 9:00:00",
+                # read_type=ReaderType.RAW,
                 output=OutputFormat.DATAFRAME,
             )
             # Type narrowing: output=DATAFRAME guarantees pd.DataFrame
@@ -79,16 +79,16 @@ try:
         # Example 2: Hybrid mode - search and read in one call
         print("Example 2: Hybrid mode - search and read in one call")
         print("-" * 80)
-        print("Searching for reactor tags and reading their data...")
+        print("Searching for V101 tags and reading their data...")
 
         # Use hybrid mode: search + read in single call
         result = client.search(
-            description="reactor",
+            tag="NAI*",
             limit=5,
-            start="2025-01-31 08:00:00",
-            end="2025-01-31 09:00:00",
-            read_type=ReaderType.AVG,
-            interval=600,  # 10 minute averages
+            start="1-NOV-25 8:00:00",
+            end="1-NOV-25 9:00:00",
+            read_type=ReaderType.INT,
+            interval=600,  # 10 minute
             output=OutputFormat.DATAFRAME,
         )
         # Type narrowing: output=DATAFRAME guarantees pd.DataFrame
@@ -105,16 +105,16 @@ try:
         # Example 3: Hybrid mode with description search
         print("Example 3: Hybrid mode with description search")
         print("-" * 80)
-        print("Searching for V1-01 tags and reading hourly averages...")
+        print("Searching for V1-01 tags and reading hourly values...")
 
         # Use hybrid mode with description search
         result = client.search(
             description="V1-01",
             limit=5,
-            start="2025-01-31 00:00:00",
-            end="2025-01-31 12:00:00",
-            read_type=ReaderType.AVG,
-            interval=3600,  # 1 hour averages
+            start="1-NOV-25 8:00:00",
+            end="1-NOV-25 9:00:00",
+            read_type=ReaderType.INT,
+            interval=3600,  # 1 hour
             output=OutputFormat.DATAFRAME,
         )
         # Type narrowing: output=DATAFRAME guarantees pd.DataFrame
@@ -135,7 +135,7 @@ try:
 
         # Search broadly and get descriptions
         all_tags_result = client.search(
-            "G*", description="V1-01", limit=20, include=IncludeFields.DESCRIPTION
+            "G?I*", description="V1-01", limit=20, include=IncludeFields.DESCRIPTION
         )
         # Type narrowing: include=DESCRIPTION guarantees list[dict[str, str]]
         assert isinstance(all_tags_result, list) and (
@@ -144,11 +144,11 @@ try:
         all_tags: list[dict[str, str]] = all_tags_result  # type: ignore[assignment]
         print(f"Found {len(all_tags)} tags total")
 
-        # Filter to only temperature and pressure tags
+        # Filter to only ti and pi tags
         selected_tags = [
             tag["name"]
             for tag in all_tags
-            if "TEMP" in tag["name"].upper() or "PRESS" in tag["name"].upper()
+            if "TI" in tag["name"].upper() or "PI" in tag["name"].upper()
         ]
 
         print(f"Filtered to {len(selected_tags)} temperature/pressure tags:")
