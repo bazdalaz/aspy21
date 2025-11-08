@@ -81,17 +81,17 @@ python examples/caching_example.py
   - Shows cache miss (first API call) vs cache hit (second call)
   - Demonstrates 10-100x speedup for cached queries
   - Displays cache statistics (hits, misses, hit rate)
-  
+
 - **Example 2**: Custom cache configuration with `CacheConfig`
   - Sets custom TTLs for different operation types
   - Configures max cache size (500 entries)
   - Shows cache behavior for search operations
-  
+
 - **Example 3**: Cache management operations
   - Get cache statistics
   - Clear entire cache
   - Invalidate specific cache entries
-  
+
 - **Example 4**: Smart caching behavior
   - Historical data cached with long TTL (24 hours)
   - Current/recent data uses short TTL or no caching
@@ -122,17 +122,17 @@ python examples/search_and_read.py
 - **Example 1**: Search for tags matching pattern, get tag names, then read data separately
   - Uses `include=IncludeFields.NONE` to return `list[str]` of tag names
   - Reads 1 hour of raw data for found tags
-  
+
 - **Example 2**: Hybrid mode with tag pattern search
   - Uses tag pattern `NAI*` to search for tags
   - Reads interpolated data with 10-minute intervals in single operation
   - Demonstrates `read_type=ReaderType.INT` with `interval=600`
-  
+
 - **Example 3**: Hybrid mode with description filter
   - Searches by description keyword `V1-01`
   - Reads interpolated data with 1-hour intervals
   - Shows how to combine search filters with data reading
-  
+
 - **Example 4**: Search broadly, filter results, then read
   - Searches with broad pattern and description filter
   - Uses `include=IncludeFields.DESCRIPTION` to get tag metadata
@@ -168,7 +168,7 @@ with AspenClient(
         read_type=ReaderType.RAW,
         max_rows=100000,  # Optional, default: 100000
     )
-    
+
     print(df)
     # Connection automatically closed at end of 'with' block
 ```
