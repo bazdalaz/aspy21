@@ -51,10 +51,10 @@ print(f"Datasource: {datasource or '(server default)'}\n")
 print("Client initialized with Basic Auth\n")
 
 try:
-    # Replace with your actual tag name
-    test_tag = "YOUR_TAG_NAME"
-    print(f"Reading tag: {test_tag}")
-    print("Time range: 2025-06-20T08:00:00 to 2025-06-20T09:00:00\n")
+    # Replace with your actual tag names (here we're reading from .env)
+    # test_tags = ["YOUR_TAG_NAME_1", "YOUR_TAG_NAME_2"]
+    print(f"Reading tags: {test_tags}")
+    print("Time range: '1-NOV-25 8:00:00 to 1-NOV-25 9:00:00\n")
 
     # Using 'with' statement ensures connection is properly closed
     with AspenClient(
@@ -65,11 +65,11 @@ try:
         verify_ssl=verify_ssl,
     ) as client:
         df = client.read(
-            [test_tag],
-            start="2025-06-20T08:00:00",
-            end="2025-06-20T09:00:00",
-            read_type=ReaderType.RAW,
-            output=OutputFormat.JSON,
+            test_tags,
+            start="1-NOV-25 8:00:00",
+            end="1-NOV-25 9:00:00",
+            # read_type=ReaderType.RAW,
+            output=OutputFormat.DATAFRAME,
         )
 
         print("\n" + "=" * 80)
