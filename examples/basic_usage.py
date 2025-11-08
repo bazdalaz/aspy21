@@ -25,6 +25,7 @@ username = os.getenv("ASPEN_USERNAME")
 password = os.getenv("ASPEN_PASSWORD")
 datasource = os.getenv("ASPEN_DATASOURCE", "")
 timeout = float(os.getenv("ASPEN_TIMEOUT", "60.0"))
+test_tags = os.getenv("ASPEN_TEST_TAGS", "").split(",")
 verify_ssl = os.getenv("ASPEN_VERIFY_SSL", "False").lower() == "true"
 
 # Validate required variables
@@ -33,6 +34,8 @@ if not all([base_url, username, password]):
     print("Required: ASPEN_BASE_URL, ASPEN_USERNAME, ASPEN_PASSWORD")
     print("Please create .env file from .env.example")
     exit(1)
+
+print(test_tags)
 
 # Type narrowing: assert non-None after validation
 assert base_url is not None

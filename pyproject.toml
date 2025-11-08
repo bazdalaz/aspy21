@@ -50,7 +50,8 @@ dev = [
   "pre-commit>=3.5",
   "build>=1.0",            # build distribution packages
   "twine>=5.0",            # upload to PyPI
-  "setuptools-scm>=8"      # for bump_version.py script
+  "setuptools-scm>=8",     # for bump_version.py script
+  "python-dotenv>=1.0"     # for .env file support
 ]
 examples = [
   "python-dotenv>=1.0"     # for .env file support in examples
