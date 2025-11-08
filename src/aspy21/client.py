@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import httpx
 import pandas as pd
 
+from .cache import AspenCache, CacheConfig
 from .models import IncludeFields, OutputFormat, ReaderType
 from .query_builder import build_sql_search_query
 
@@ -61,6 +62,7 @@ class AspenClient:
         verify_ssl: bool = True,
         datasource: str | None = None,
         http_client: httpx.Client | None = None,
+        cache: AspenCache | CacheConfig | bool | None = None,
     ) -> None:
         """Initialize the Aspen client.
 
@@ -73,6 +75,11 @@ class AspenClient:
             datasource: Aspen datasource name. If None, uses server default.
             http_client: Optional httpx.Client instance. If None, creates a new client.
                         Useful for dependency injection and testing.
+            cache: Cache configuration:
+                  - None: No caching (default)
+                  - True: Enable caching with default config
+                  - CacheConfig: Enable caching with custom config
+                  - AspenCache: Use existing cache instance
 
         Example:
             Using context manager with authentication:
@@ -114,6 +121,20 @@ class AspenClient:
         else:
             self._client = http_client
 
+        # Initialize cache
+        if cache is None:
+            self._cache: AspenCache | None = None
+        elif isinstance(cache, bool):
+            self._cache = AspenCache() if cache else None
+        elif isinstance(cache, CacheConfig):
+            self._cache = AspenCache(cache)
+        elif isinstance(cache, AspenCache):
+            self._cache = cache
+        else:
+            raise TypeError(
+                f"cache must be None, bool, CacheConfig, or AspenCache, got {type(cache)}"
+            )
+
         # Initialize reader strategies
         from .readers import (
             AggregatesReader,
@@ -135,6 +156,8 @@ class AspenClient:
         logger.debug(
             f"Config: timeout={timeout}s, verify_ssl={verify_ssl}, datasource={datasource}"
         )
+        if self._cache:
+            logger.info(f"Cache enabled: {self._cache.get_stats()}")
 
     def __enter__(self) -> AspenClient:
         """Enter context manager.
