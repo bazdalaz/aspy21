@@ -186,6 +186,95 @@ class AspenClient:
         if self._owns_client:
             self._client.close()
 
+    def _is_historical_data(self, end: str | None) -> bool:
+        """Check if the requested data is historical (in the past).
+
+        Only historical data should be cached with long TTL, as it's immutable.
+        Current/future data should have short TTL or no caching.
+
+        Args:
+            end: End timestamp string
+
+        Returns:
+            True if data is definitely in the past, False otherwise
+        """
+        if end is None:
+            return False
+
+        try:
+            end_dt = pd.to_datetime(end)
+            # Add 1 minute buffer to account for clock skew
+            return end_dt < (pd.Timestamp.now() - pd.Timedelta(minutes=1))
+        except Exception:
+            # If we can't parse, assume not historical to be safe
+            return False
+
+    def _determine_cache_operation(
+        self, read_type: ReaderType, start: str | None, end: str | None
+    ) -> str:
+        """Determine cache operation type based on read parameters.
+
+        Args:
+            read_type: Type of read operation
+            start: Start timestamp
+            end: End timestamp
+
+        Returns:
+            Cache operation string for TTL lookup
+        """
+        if start is None and end is None:
+            return "read_snapshot"
+
+        if read_type in (ReaderType.AVG, ReaderType.MIN, ReaderType.MAX, ReaderType.RNG):
+            return "read_aggregates"
+
+        return "read_historical"
+
+    def get_cache_stats(self) -> dict | None:
+        """Get cache statistics.
+
+        Returns:
+            Dictionary with cache stats (hits, misses, hit_rate, size) or None if cache disabled
+        """
+        return self._cache.get_stats() if self._cache else None
+
+    def clear_cache(self) -> int:
+        """Clear all cached entries.
+
+        Returns:
+            Number of entries cleared, or 0 if cache disabled
+        """
+        if self._cache:
+            return self._cache.invalidate()
+        return 0
+
+    def invalidate_cache(
+        self, tags: list[str] | None = None, start: str | None = None, end: str | None = None
+    ) -> int:
+        """Invalidate specific cache entries.
+
+        Args:
+            tags: Tag names to invalidate. If None, invalidates all.
+            start: Start timestamp to match
+            end: End timestamp to match
+
+        Returns:
+            Number of entries invalidated
+        """
+        if not self._cache:
+            return 0
+
+        if tags is None and start is None and end is None:
+            return self._cache.invalidate()
+
+        # Invalidate specific entries (will need to match parameters)
+        # For now, this is a basic implementation
+        count = 0
+        if tags:
+            for tag in tags:
+                count += self._cache.invalidate("read", tags=[tag], start=start, end=end)
+        return count
+
     def read(
         self,
         tags: list[str],
@@ -281,6 +370,25 @@ class AspenClient:
         logger.debug(f"Tags: {tags}")
         logger.debug(f"Reader type: {effective_read_type.value}, Interval: {interval}")
 
+        # Try cache first if enabled
+        cache_key_params = {
+            "tags": sorted(tags),
+            "start": start,
+            "end": end,
+            "interval": interval,
+            "read_type": effective_read_type.value,
+            "include": include.value,
+            "limit": limit,
+        }
+
+        if self._cache:
+            cache_operation = self._determine_cache_operation(effective_read_type, start, end)
+            cached_result = self._cache.get(cache_operation, **cache_key_params)
+
+            if cached_result is not None:
+                logger.debug(f"Cache hit for {cache_operation}")
+                return cached_result
+
         # Select appropriate reader strategy
         for reader in self._readers:
             if reader.can_handle(effective_read_type, start, end):
@@ -299,7 +407,7 @@ class AspenClient:
             raise ValueError(f"No reader available for read_type={effective_read_type}")
 
         # Format output using formatter
-        return DataFormatter.format_output(
+        result = DataFormatter.format_output(
             frames=frames,
             tags=tags,
             tag_descriptions=tag_descriptions,
@@ -307,6 +415,15 @@ class AspenClient:
             include_status=include_status,
             with_description=with_description,
         )
+
+        # Cache the result if enabled
+        # Only cache historical data with long TTL to avoid caching current values
+        if self._cache and self._is_historical_data(end):
+            cache_operation = self._determine_cache_operation(effective_read_type, start, end)
+            self._cache.set(cache_operation, result, **cache_key_params)
+            logger.debug(f"Cached result for {cache_operation}")
+
+        return result
 
     def _search_by_sql(
         self,
@@ -532,6 +649,20 @@ class AspenClient:
             f"hybrid_mode={start is not None}"
         )
 
+        # Try cache for search-only mode (hybrid mode caching is handled by read())
+        if self._cache and start is None:
+            cache_key_params = {
+                "tag": tag,
+                "description": description,
+                "need_descriptions": need_descriptions,
+                "case_sensitive": case_sensitive,
+                "limit": limit,
+            }
+            cached_result = self._cache.get("search", **cache_key_params)
+            if cached_result is not None:
+                logger.debug("Cache hit for search")
+                return cached_result
+
         # Step 1: Search for tags
         # If description is provided, use SQL endpoint for efficient server-side search
         if description:
@@ -619,6 +750,18 @@ class AspenClient:
 
         # Step 2: If no start time, return search results (search-only mode)
         if start is None:
+            # Cache search results (metadata doesn't change often)
+            if self._cache:
+                cache_key_params = {
+                    "tag": tag,
+                    "description": description,
+                    "need_descriptions": need_descriptions,
+                    "case_sensitive": case_sensitive,
+                    "limit": limit,
+                }
+                self._cache.set("search", search_results, **cache_key_params)
+                logger.debug("Cached search results")
+
             return search_results
 
         # Step 3: Hybrid mode - extract tag names and read data
