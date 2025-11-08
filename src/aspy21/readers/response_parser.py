@@ -301,6 +301,12 @@ class SqlAggregatesResponseParser(ResponseParser):
         from collections import defaultdict
 
         try:
+            logger.debug("SqlAggregatesResponseParser.parse called")
+            logger.debug(f"Response type: {type(response)}")
+            logger.debug(f"Response content: {response}")
+            logger.debug(f"Tag names: {tag_names}")
+            logger.debug(f"Value column: {value_column}")
+
             if not response:
                 logger.warning("No data in SQL aggregates response")
                 return [], {}
@@ -309,9 +315,11 @@ class SqlAggregatesResponseParser(ResponseParser):
             tag_records: dict[str, list[dict]] = defaultdict(list)
             tag_descriptions: dict[str, str] = {}
 
-            for record in response:
+            for i, record in enumerate(response):
+                logger.debug(f"Processing record {i}: type={type(record)}, content={record}")
                 tag_name = record.get("name")
                 if not tag_name:
+                    logger.warning(f"Record {i} has no 'name' field")
                     continue
 
                 tag_records[tag_name].append(record)
