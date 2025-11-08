@@ -71,14 +71,15 @@ include = ["aspy21*"]
 line-length = 100
 src = ["src", "tests"]
 target-version = "py39"
+exclude = ["examples"]
 
 [tool.ruff.lint]
 extend-select = ["I", "B", "UP", "SIM", "C4", "F", "E", "W"]
 ignore = ["D100", "D104", "D105"]
-exclude = ["examples"]
 
 [tool.ruff.lint.extend-per-file-ignores]
 "examples/*" = ["E402"]
+exclude = ["examples"]
 
 [tool.ruff.format]
 quote-style = "double"
