@@ -42,9 +42,9 @@ class AggregatesReader(BaseReader):
         """Check if this reader handles aggregates reads."""
         from ..models import ReaderType as RT
 
-        # Handle aggregate reads with datasource configured
+        # Handle aggregate reads (MIN, MAX, AVG, RNG) with datasource configured
         return (
-            read_type in (RT.MIN, RT.MAX, RT.RNG)
+            read_type in (RT.MIN, RT.MAX, RT.AVG, RT.RNG)
             and bool(self.datasource)
             and start is not None
             and end is not None
@@ -67,8 +67,8 @@ class AggregatesReader(BaseReader):
             tags: List of tag names
             start: Start timestamp
             end: End timestamp
-            interval: Not used for aggregates (period is calculated from start/end)
-            read_type: Type of aggregation (MIN, MAX, RNG)
+            interval: Interval in seconds for period calculation. If None, period = (end - start)
+            read_type: Type of aggregation (MIN, MAX, AVG, RNG)
             include_status: Not supported for aggregates (ignored)
             max_rows: Maximum rows (not typically applicable for aggregates)
             with_description: Include tag descriptions
@@ -77,7 +77,12 @@ class AggregatesReader(BaseReader):
             Tuple of (list of DataFrames for each tag, dict of tag descriptions)
         """
         logger.debug(f"Using SQL aggregates endpoint for {read_type.value} read")
-        logger.debug(f"Querying {len(tags)} tag(s) with period from {start} to {end}")
+        if interval:
+            logger.debug(
+                f"Querying {len(tags)} tag(s) with interval {interval}s from {start} to {end}"
+            )
+        else:
+            logger.debug(f"Querying {len(tags)} tag(s) with period from {start} to {end}")
 
         assert start is not None
         assert end is not None
@@ -88,6 +93,7 @@ class AggregatesReader(BaseReader):
             end=end,
             datasource=self.datasource,
             read_type=read_type,
+            interval=interval,
             with_description=with_description,
             include_status=False,  # Not supported for aggregates
         )
@@ -107,6 +113,7 @@ class AggregatesReader(BaseReader):
         value_column_map = {
             RT.MIN: "min",
             RT.MAX: "max",
+            RT.AVG: "avg",
             RT.RNG: "rng",
         }
         value_column = value_column_map[read_type]

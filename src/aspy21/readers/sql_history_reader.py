@@ -42,9 +42,10 @@ class SqlHistoryReader(BaseReader):
         """Check if this reader handles SQL history reads."""
         from ..models import ReaderType as RT
 
-        # Handle RAW/INT/AVG reads with datasource configured
+        # Handle RAW/INT reads with datasource configured
+        # AVG now uses aggregates table exclusively
         return (
-            read_type in (RT.RAW, RT.INT, RT.AVG)
+            read_type in (RT.RAW, RT.INT)
             and bool(self.datasource)
             and start is not None
             and end is not None

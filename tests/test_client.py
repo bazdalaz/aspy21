@@ -232,12 +232,16 @@ def test_http_error_handling(mock_api):
 
 
 def test_aggregated_read_with_interval(mock_api):
-    """Test aggregated read with interval parameter."""
-    route = mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll")
+    """Test AVG with interval parameter uses aggregates table."""
+    route = mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL")
     route.mock(
         return_value=httpx.Response(
             200,
-            json={"data": [{"samples": [{"t": 1750406400000, "v": 5.5, "s": 8}]}]},
+            json=[
+                {"ts": "2025-06-20T08:00:00Z", "name": "TAG1", "avg": 5.5},
+                {"ts": "2025-06-20T08:10:00Z", "name": "TAG1", "avg": 6.0},
+                {"ts": "2025-06-20T08:20:00Z", "name": "TAG1", "avg": 5.8},
+            ],
         )
     )
 
@@ -245,9 +249,10 @@ def test_aggregated_read_with_interval(mock_api):
         base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
         timeout=2,
         verify_ssl=False,
+        datasource="IP21",
     )
 
-    # Test with AVG reader type and interval
+    # Test with AVG reader type and interval - should use aggregates table
     df = c.read(
         tags=["TAG1"],
         start="2025-06-20 08:00:00",
@@ -257,15 +262,48 @@ def test_aggregated_read_with_interval(mock_api):
         output=OutputFormat.DATAFRAME,
     )
 
-    # Verify interval parameters are in the XML
+    # Verify SQL query uses aggregates table with period = interval * 10
     assert route.called
     request = route.calls.last.request
     request_body = request.content.decode("utf-8")
 
-    assert "<P>600</P>" in request_body  # Period
-    assert "<PU>3</PU>" in request_body  # Period unit (seconds)
-    assert "<RT>10</RT>" in request_body  # AVG reader type
+    assert "aggregates" in request_body.lower()  # Uses aggregates table
+    assert "period = 6000" in request_body  # 600 seconds * 10 tenths
+    assert "avg" in request_body.lower()  # Queries avg column
     assert isinstance(df, pd.DataFrame)
+    assert len(df) == 3  # Should return multiple values
+    c.close()
+
+
+def test_avg_without_interval(mock_api):
+    """Test AVG without interval returns single aggregate value."""
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"ts": "2025-01-01T00:00:00Z", "name": "TAG1", "avg": 42.5},
+            ],
+        )
+    )
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+        datasource="IP21",
+    )
+
+    result = c.read(
+        ["TAG1"],
+        start="2025-01-01 00:00:00",
+        end="2025-01-02 00:00:00",
+        read_type=ReaderType.AVG,
+        output=OutputFormat.JSON,
+    )
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0]["value"] == 42.5
     c.close()
 
 

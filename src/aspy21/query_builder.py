@@ -452,6 +452,7 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
         end: str,
         datasource: str,
         read_type: ReaderType,
+        interval: int | None = None,
         with_description: bool = False,
         include_status: bool = False,
     ) -> str:
@@ -462,7 +463,8 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
             start: Start timestamp (ISO format)
             end: End timestamp (ISO format)
             datasource: Aspen datasource name
-            read_type: Type of aggregation (MIN, MAX, RNG)
+            read_type: Type of aggregation (MIN, MAX, AVG, RNG)
+            interval: Interval in seconds for period calculation. If None, period = (end - start)
             with_description: Include ip_description field in response
             include_status: Include status field in response (not supported for aggregates)
 
@@ -474,17 +476,22 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
         # Convert tags to list if string
         tags_list = [tags] if isinstance(tags, str) else tags
 
-        # Calculate period as end - start in tenths of seconds
-        # Aspen aggregates table expects period in tenths of seconds
-        start_dt = pd.to_datetime(start)
-        end_dt = pd.to_datetime(end)
-        period_seconds = int((end_dt - start_dt).total_seconds())
-        period_tenths = period_seconds * 10  # Convert to tenths of seconds
+        # Calculate period in tenths of seconds
+        # - If interval provided: period = interval * 10 (returns multiple values)
+        # - If no interval: period = (end - start) * 10 (returns single value)
+        if interval:
+            period_tenths = interval * 10
+        else:
+            start_dt = pd.to_datetime(start)
+            end_dt = pd.to_datetime(end)
+            period_seconds = int((end_dt - start_dt).total_seconds())
+            period_tenths = period_seconds * 10
 
         # Map ReaderType to SQL column name
         agg_column_map = {
             ReaderType.MIN: "min",
             ReaderType.MAX: "max",
+            ReaderType.AVG: "avg",
             ReaderType.RNG: "rng",
         }
 
@@ -528,6 +535,7 @@ def build_aggregates_sql_query(
     end: str,
     datasource: str,
     read_type: ReaderType,
+    interval: int | None = None,
     with_description: bool = False,
     include_status: bool = False,
 ) -> str:
@@ -538,7 +546,8 @@ def build_aggregates_sql_query(
         start: Start timestamp (ISO format)
         end: End timestamp (ISO format)
         datasource: Aspen datasource name
-        read_type: Type of aggregation (MIN, MAX, RNG)
+        read_type: Type of aggregation (MIN, MAX, AVG, RNG)
+        interval: Interval in seconds for period calculation. If None, period = (end - start)
         with_description: Include ip_description field in response
         include_status: Include status field in response (not supported for aggregates)
 
@@ -552,6 +561,7 @@ def build_aggregates_sql_query(
         end=end,
         datasource=datasource,
         read_type=read_type,
+        interval=interval,
         with_description=with_description,
         include_status=include_status,
     )
