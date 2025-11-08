@@ -52,3 +52,7 @@ src/aspy21/_version.py
 .coverage.xml
 .coverage.xml.gz
 coverage.json
+
+# Benchmark results
+benchmark_results.json
+.benchmarks/
