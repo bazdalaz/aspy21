@@ -99,10 +99,11 @@ class AspenCache:
         sorted_params = sorted(params.items())
 
         # Handle special types
-        key_data = {"op": operation}
+        key_data: dict[str, Any] = {"op": operation}
         for k, v in sorted_params:
             if isinstance(v, (list, tuple)):
-                key_data[k] = tuple(sorted(v)) if v else ()
+                # Sort and convert to tuple for consistent hashing
+                key_data[k] = tuple(str(x) for x in sorted(v)) if v else ()
             elif isinstance(v, pd.DataFrame):
                 # Don't cache DataFrames as keys
                 continue
