@@ -10,7 +10,7 @@ import httpx
 import pandas as pd
 
 from .models import IncludeFields, OutputFormat, ReaderType
-from .query_builder import build_sql_search_query
+from .query_builder import SqlSearchQueryBuilder
 
 if TYPE_CHECKING:
     from httpx import Auth
@@ -119,7 +119,6 @@ class AspenClient:
             AggregatesReader,
             SnapshotReader,
             SqlHistoryReader,
-            XmlHistoryReader,
         )
 
         self._readers = [
@@ -128,7 +127,6 @@ class AspenClient:
                 self.base_url, self.datasource, self._client
             ),  # Check aggregates before history
             SqlHistoryReader(self.base_url, self.datasource, self._client),
-            XmlHistoryReader(self.base_url, self.datasource, self._client),
         ]
 
         logger.info(f"Initialized AspenClient for {self.base_url}")
@@ -258,6 +256,13 @@ class AspenClient:
         logger.debug(f"Tags: {tags}")
         logger.debug(f"Reader type: {effective_read_type.value}, Interval: {interval}")
 
+        # Require datasource for historical reads (RAW, INT, MIN, MAX, AVG, RNG)
+        if start is not None and end is not None and not self.datasource:
+            message = "Datasource is required for historical reads. "
+            message += "Please set datasource when creating AspenClient: "
+            message += "AspenClient(base_url=..., datasource='your_datasource')"
+            raise ValueError(message)
+
         # Select appropriate reader strategy
         for reader in self._readers:
             if reader.can_handle(effective_read_type, start, end):
@@ -312,14 +317,14 @@ class AspenClient:
             ValueError: If datasource is not configured
         """
         if not self.datasource:
-            raise ValueError(
-                "Datasource is required for SQL search. "
-                "Please set datasource when creating AspenClient: "
-                "AspenClient(base_url=..., datasource='your_datasource')"
-            )
+            message: str = "Datasource is required for SQL search. "
+            message += "Please set datasource when creating AspenClient: "
+            message += "AspenClient(base_url=..., datasource='your_datasource')"
+            raise ValueError(message)
 
         # Build XML query for SQL endpoint
-        xml = build_sql_search_query(
+        builder = SqlSearchQueryBuilder()
+        xml = builder.build(
             datasource=self.datasource,
             description=description,
             tag_pattern=tag_pattern,

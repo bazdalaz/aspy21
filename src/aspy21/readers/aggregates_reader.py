@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from ..query_builder import build_aggregates_sql_query
+from ..query_builder import SqlAggregatesQueryBuilder
 from .base_reader import BaseReader
 from .response_parser import SqlAggregatesResponseParser
 
@@ -67,7 +67,7 @@ class AggregatesReader(BaseReader):
             tags: List of tag names
             start: Start timestamp
             end: End timestamp
-            interval: Interval in seconds for period calculation. If None, period = (end - start)
+            interval: Not used for aggregates (period is calculated from start/end)
             read_type: Type of aggregation (MIN, MAX, AVG, RNG)
             include_status: Not supported for aggregates (ignored)
             max_rows: Maximum rows (not typically applicable for aggregates)
@@ -87,7 +87,8 @@ class AggregatesReader(BaseReader):
         assert start is not None
         assert end is not None
 
-        xml_query = build_aggregates_sql_query(
+        builder = SqlAggregatesQueryBuilder()
+        xml_query = builder.build(
             tags=tags,
             start=start,
             end=end,
