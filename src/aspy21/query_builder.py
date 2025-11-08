@@ -70,7 +70,7 @@ class SqlHistoryQueryBuilder(QueryBuilder):
         # Map ReaderType to Aspen request parameter
         request_map = {
             ReaderType.RAW: 4,  # Raw historical data
-            ReaderType.INT: 5,  # Interpolated data with data point to current value
+            ReaderType.INT: 1,  # Interpolated data
         }
         request_value = request_map.get(read_type, ReaderType.INT)  # Default to INTERPOLATED
 
