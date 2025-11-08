@@ -180,7 +180,14 @@ class TestReaderTypePerformance:
         """Benchmark: SNAPSHOT reader type."""
         respx_mock.post("https://aspen.local/ProcessData/SQL").mock(
             return_value=httpx.Response(
-                200, json=[{"ts": "2025-01-01T08:00:00.000Z", "name": "TAG1", "value": 25.5}]
+                200,
+                json=[
+                    {
+                        "name": "TAG1",
+                        "name->ip_description": "Test Tag",
+                        "name->ip_input_value": 25.5,
+                    }
+                ],
             )
         )
 
@@ -201,22 +208,9 @@ class TestReaderTypePerformance:
         respx_mock.post("https://aspen.local/ProcessData/SQL").mock(
             return_value=httpx.Response(
                 200,
-                json={
-                    "data": [
-                        {
-                            "cols": [{"n": "NAME"}, {"n": "TS"}, {"n": "VALUE"}],
-                            "rows": [
-                                {
-                                    "fld": [
-                                        {"v": "TAG1"},
-                                        {"v": "2025-01-01T08:00:00.000Z"},
-                                        {"v": 25.5},
-                                    ]
-                                }
-                            ],
-                        }
-                    ]
-                },
+                json=[
+                    {"ts": "2025-01-01T08:00:00Z", "name": "TAG1", "avg": 25.5},
+                ],
             )
         )
 
