@@ -49,7 +49,7 @@ class SqlHistoryQueryBuilder(QueryBuilder):
             start: Start timestamp (ISO format)
             end: End timestamp (ISO format)
             datasource: Aspen datasource name
-            read_type: Type of read (RAW or INT)
+            read_type: Type of read (RAW, INT, or AVG)
             interval: Sampling interval in seconds (converted to period in tenths of seconds)
             max_rows: Maximum number of rows to return
             with_description: Include ip_description field in response
