@@ -131,6 +131,7 @@ class TestAspenClientCache:
 
         # Cache stats should show hit
         stats = client.get_cache_stats()
+        assert stats is not None
         assert stats["hits"] == 1
         assert stats["misses"] == 1
         assert stats["hit_rate_percent"] == 50.0
@@ -251,6 +252,7 @@ class TestAspenClientCache:
 
         # Cache hit
         stats = client.get_cache_stats()
+        assert stats is not None
         assert stats["hits"] == 1
 
         client.close()
@@ -292,10 +294,12 @@ class TestAspenClientCache:
         )
 
         # Manually add to cache
+        assert client._cache is not None
         client._cache.set("test", "value", key=1)
         client._cache.set("test", "value", key=2)
 
         stats = client.get_cache_stats()
+        assert stats is not None
         assert stats["size"] == 2
 
         # Clear cache
@@ -303,6 +307,7 @@ class TestAspenClientCache:
 
         assert count == 2
         stats = client.get_cache_stats()
+        assert stats is not None
         assert stats["size"] == 0
 
         client.close()
@@ -316,10 +321,12 @@ class TestAspenClientCache:
         )
 
         # Manually add cache entries
+        assert client._cache is not None
         client._cache.set("read", "data1", tags=["TAG1"])
         client._cache.set("read", "data2", tags=["TAG2"])
 
         stats_before = client.get_cache_stats()
+        assert stats_before is not None
         assert stats_before["size"] == 2
 
         # Invalidate all
@@ -327,6 +334,7 @@ class TestAspenClientCache:
 
         assert count == 2
         stats_after = client.get_cache_stats()
+        assert stats_after is not None
         assert stats_after["size"] == 0
 
         client.close()

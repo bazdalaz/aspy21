@@ -74,7 +74,7 @@ with AspenClient(
     if cache_time > 0:
         print(f"  Speedup: {api_time / cache_time:.1f}x faster!")
     else:
-        print(f"  Speedup: >1000x faster! (cache time < 0.001s)")
+        print("  Speedup: >1000x faster! (cache time < 0.001s)")
 
     # Show cache statistics
     stats = client.get_cache_stats()
