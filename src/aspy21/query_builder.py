@@ -123,7 +123,7 @@ class SqlHistoryQueryBuilder(QueryBuilder):
             start: Start timestamp (ISO format)
             end: End timestamp (ISO format)
             datasource: Aspen datasource name
-            read_type: Type of read (RAW or INT)
+            read_type: Type of read (RAW, INT, or AVG)
             interval: Sampling interval in seconds (converted to period in tenths of seconds)
             max_rows: Maximum number of rows to return
             with_description: Include ip_description field in response
@@ -142,6 +142,7 @@ class SqlHistoryQueryBuilder(QueryBuilder):
         request_map = {
             ReaderType.RAW: 4,  # Raw historical data
             ReaderType.INT: 1,  # Interpolated data
+            ReaderType.AVG: 2,  # Average data
         }
         request_value = request_map.get(read_type, 4)  # Default to RAW
 
@@ -365,7 +366,7 @@ def build_history_sql_query(
         start: Start timestamp (ISO format)
         end: End timestamp (ISO format)
         datasource: Aspen datasource name
-        read_type: Type of read (RAW or INT)
+        read_type: Type of read (RAW, INT, or AVG)
         interval: Sampling interval in seconds (converted to period in tenths of seconds)
         max_rows: Maximum number of rows to return
         with_description: Include ip_description field in response

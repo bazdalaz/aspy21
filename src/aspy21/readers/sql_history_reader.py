@@ -42,9 +42,9 @@ class SqlHistoryReader(BaseReader):
         """Check if this reader handles SQL history reads."""
         from ..models import ReaderType as RT
 
-        # Handle RAW/INT reads with datasource configured
+        # Handle RAW/INT/AVG reads with datasource configured
         return (
-            read_type in (RT.RAW, RT.INT)
+            read_type in (RT.RAW, RT.INT, RT.AVG)
             and bool(self.datasource)
             and start is not None
             and end is not None
