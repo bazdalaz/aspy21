@@ -254,7 +254,7 @@ with AspenClient(
     # Show cache with different TTLs
     if client._cache:
         print(f"\nCache contains {len(client._cache._cache)} entries with different TTLs:")
-        for idx, (key, entry) in enumerate(client._cache._cache.items(), 1):
+        for idx, (_key, entry) in enumerate(client._cache._cache.items(), 1):
             ttl_remaining = (entry.expires_at - datetime.now()).total_seconds()
             print(f"  {idx}. {entry} | TTL remaining: {ttl_remaining:.0f}s")
 
