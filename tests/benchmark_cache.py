@@ -303,12 +303,12 @@ class TestCacheScalability:
 
             # Validate hit rate (should be 80% for this workload)
             assert stats is not None
-            assert stats["total_requests"] == 50, (
-                f"Expected 50 requests, got {stats['total_requests']}"
-            )
-            assert stats["hit_rate_percent"] >= 75.0, (
-                f"Hit rate too low: {stats['hit_rate_percent']}%"
-            )
+            assert (
+                stats["total_requests"] == 50
+            ), f"Expected 50 requests, got {stats['total_requests']}"
+            assert (
+                stats["hit_rate_percent"] >= 75.0
+            ), f"Hit rate too low: {stats['hit_rate_percent']}%"
 
             return stats["hit_rate_percent"]
 
