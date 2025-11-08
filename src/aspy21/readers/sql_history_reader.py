@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from ..query_builder import build_history_sql_query
+from ..query_builder import SqlHistoryQueryBuilder
 from .base_reader import BaseReader
 from .response_parser import SqlHistoryResponseParser
 
@@ -42,9 +42,9 @@ class SqlHistoryReader(BaseReader):
         """Check if this reader handles SQL history reads."""
         from ..models import ReaderType as RT
 
-        # Handle RAW/INT/AVG reads with datasource configured
-        return (
-            read_type in (RT.RAW, RT.INT, RT.AVG)
+        # Handle RAW/INT reads with datasource configured
+        return bool(
+            read_type in (RT.RAW, RT.INT)
             and bool(self.datasource)
             and start is not None
             and end is not None
@@ -73,7 +73,8 @@ class SqlHistoryReader(BaseReader):
         assert start is not None
         assert end is not None
 
-        xml_query = build_history_sql_query(
+        builder = SqlHistoryQueryBuilder()
+        xml_query = builder.build(
             tags=tags,  # Pass all tags for batched query
             start=start,
             end=end,

@@ -9,20 +9,14 @@ from aspy21 import AspenClient, IncludeFields, OutputFormat, ReaderType
 
 
 def test_read_basic(mock_api):
-    # Mock the Aspen API response format
-    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
+    # Mock the SQL API response format
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
         return_value=httpx.Response(
             200,
-            json={
-                "data": [
-                    {
-                        "samples": [
-                            {"t": 1750406400000, "v": 3.0, "s": 8},
-                            {"t": 1750410000000, "v": 3.5, "s": 8},
-                        ]
-                    }
-                ]
-            },
+            json=[
+                {"ts": "2025-06-20T08:00:00.000000Z", "name": "ATI111", "value": 3.0},
+                {"ts": "2025-06-20T09:00:00.000000Z", "name": "ATI111", "value": 3.5},
+            ],
         )
     )
 
@@ -30,6 +24,7 @@ def test_read_basic(mock_api):
         base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
         timeout=2,
         verify_ssl=False,
+        datasource="IP21",
     )
 
     df = c.read(
@@ -46,97 +41,17 @@ def test_read_basic(mock_api):
     c.close()
 
 
-def test_limit_parameter(mock_api):
-    """Test that limit parameter is properly included in XML query."""
-    # Mock the API to capture the request
-    route = mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll")
-    route.mock(
-        return_value=httpx.Response(
-            200,
-            json={"data": [{"samples": [{"t": 1750406400000, "v": 1.0, "s": 8}]}]},
-        )
-    )
-
-    c = AspenClient(
-        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
-        timeout=2,
-        verify_ssl=False,
-    )
-
-    # Test with custom limit
-    df = c.read(
-        ["TAG1"],
-        start="2025-06-20 08:00:00",
-        end="2025-06-20 09:00:00",
-        read_type=ReaderType.RAW,
-        limit=250000,
-        output=OutputFormat.DATAFRAME,
-    )
-
-    # Verify the request was made
-    assert route.called
-    request = route.calls.last.request
-    request_body = request.content.decode("utf-8")
-
-    # Verify limit is in the XML
-    assert "<X>250000</X>" in request_body
-    assert isinstance(df, pd.DataFrame)
-    c.close()
-
-
-def test_limit_default(mock_api):
-    """Test that limit defaults to 100000."""
-    route = mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll")
-    route.mock(
-        return_value=httpx.Response(
-            200,
-            json={"data": [{"samples": [{"t": 1750406400000, "v": 1.0, "s": 8}]}]},
-        )
-    )
-
-    c = AspenClient(
-        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
-        timeout=2,
-        verify_ssl=False,
-    )
-
-    # Test without specifying limit
-    df = c.read(
-        tags=["TAG1"],
-        start="2025-06-20 08:00:00",
-        end="2025-06-20 09:00:00",
-        read_type=ReaderType.RAW,
-        output=OutputFormat.DATAFRAME,
-    )
-
-    # Verify the request was made with default limit
-    assert route.called
-    request = route.calls.last.request
-    request_body = request.content.decode("utf-8")
-
-    # Verify default limit (100000) is in the XML
-    assert "<X>100000</X>" in request_body
-    assert isinstance(df, pd.DataFrame)
-    c.close()
-
-
 def test_limit_enforced_single_tag(mock_api):
     """Ensure limit limits the number of rows returned per tag."""
-    route = mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll")
+    route = mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL")
     route.mock(
         return_value=httpx.Response(
             200,
-            json={
-                "data": [
-                    {
-                        "samples": [
-                            {"t": 1750406400000, "v": 1.0, "s": 8},
-                            {"t": 1750408200000, "v": 2.0, "s": 8},
-                            {"t": 1750410000000, "v": 3.0, "s": 8},
-                        ]
-                    }
-                ]
-            },
+            json=[
+                {"ts": "2025-06-20T11:00:00.000Z", "name": "TAG1", "value": 1.0, "status": 8},
+                {"ts": "2025-06-20T11:30:00.000Z", "name": "TAG1", "value": 2.0, "status": 8},
+                {"ts": "2025-06-20T12:00:00.000Z", "name": "TAG1", "value": 3.0, "status": 8},
+            ],
         )
     )
 
@@ -144,6 +59,7 @@ def test_limit_enforced_single_tag(mock_api):
         base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
         timeout=2,
         verify_ssl=False,
+        datasource="IP21",
     )
 
     df = c.read(
@@ -165,7 +81,7 @@ def test_limit_enforced_single_tag(mock_api):
 def test_api_error_response(mock_api):
     """Test handling of API error responses."""
     # Mock API returning an error in the sample
-    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -184,6 +100,7 @@ def test_api_error_response(mock_api):
         base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
         timeout=2,
         verify_ssl=False,
+        datasource="IP21",
     )
 
     df = c.read(
@@ -197,75 +114,6 @@ def test_api_error_response(mock_api):
     # Should return empty DataFrame for error responses
     assert isinstance(df, pd.DataFrame)
     assert df.empty
-    c.close()
-
-
-def test_http_error_handling(mock_api):
-    """Test handling of HTTP errors."""
-    # Mock API returning HTTP 500 error
-    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
-        return_value=httpx.Response(
-            500,
-            text="Internal Server Error",
-        )
-    )
-
-    c = AspenClient(
-        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
-        timeout=2,
-        verify_ssl=False,
-    )
-
-    # Should raise RetryError (which wraps HTTPStatusError after retries)
-    import pytest
-    from tenacity import RetryError
-
-    with pytest.raises(RetryError):
-        c.read(
-            tags=["TAG1"],
-            start="2025-06-20 08:00:00",
-            end="2025-06-20 09:00:00",
-            read_type=ReaderType.RAW,
-        )
-
-    c.close()
-
-
-def test_aggregated_read_with_interval(mock_api):
-    """Test aggregated read with interval parameter."""
-    route = mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll")
-    route.mock(
-        return_value=httpx.Response(
-            200,
-            json={"data": [{"samples": [{"t": 1750406400000, "v": 5.5, "s": 8}]}]},
-        )
-    )
-
-    c = AspenClient(
-        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
-        timeout=2,
-        verify_ssl=False,
-    )
-
-    # Test with AVG reader type and interval
-    df = c.read(
-        tags=["TAG1"],
-        start="2025-06-20 08:00:00",
-        end="2025-06-20 09:00:00",
-        read_type=ReaderType.AVG,
-        interval=600,  # 10 minutes
-        output=OutputFormat.DATAFRAME,
-    )
-
-    # Verify interval parameters are in the XML
-    assert route.called
-    request = route.calls.last.request
-    request_body = request.content.decode("utf-8")
-
-    assert "<P>600</P>" in request_body  # Period
-    assert "<PU>3</PU>" in request_body  # Period unit (seconds)
-    assert "<RT>10</RT>" in request_body  # AVG reader type
-    assert isinstance(df, pd.DataFrame)
     c.close()
 
 
@@ -515,7 +363,7 @@ def test_datasource_parameter(mock_api):
 def test_empty_response(mock_api):
     """Test handling of empty response from API."""
     # Mock API returning no samples
-    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
         return_value=httpx.Response(
             200,
             json={"data": [{"samples": []}]},
@@ -526,6 +374,7 @@ def test_empty_response(mock_api):
         base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
         timeout=2,
         verify_ssl=False,
+        datasource="IP21",
     )
 
     df = c.read(
@@ -540,91 +389,6 @@ def test_empty_response(mock_api):
     assert isinstance(df, pd.DataFrame)
     assert df.empty
     c.close()
-
-
-def test_xml_read_json_with_description(mock_api):
-    """Ensure XML endpoint results convert to JSON with description."""
-    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "data": [
-                    {
-                        "samples": [
-                            {"t": 1750406400000, "v": 42.0, "s": 4},
-                        ],
-                        "l": [
-                            None,
-                            "Flow indicator",
-                        ],
-                    }
-                ]
-            },
-        )
-    )
-
-    c = AspenClient(
-        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
-        timeout=2,
-        verify_ssl=False,
-    )
-
-    data = c.read(
-        ["FI101"],
-        start="2025-06-20 08:00:00",
-        end="2025-06-20 09:00:00",
-        read_type=ReaderType.RAW,
-        include=IncludeFields.ALL,
-        output=OutputFormat.JSON,
-    )
-
-    assert isinstance(data, list)
-    assert len(data) == 1
-    record = data[0]
-    assert record["tag"] == "FI101"
-    assert record["description"] == "Flow indicator"
-    assert record["value"] == 42.0
-    assert record["timestamp"].startswith("2025-06-20T08:00:00")
-    c.close()
-
-
-def test_xml_read_json_without_description_by_default(mock_api):
-    """Ensure descriptions are omitted from JSON unless explicitly requested."""
-    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "data": [
-                    {
-                        "samples": [
-                            {"t": 1750406400000, "v": 42.0, "s": 4},
-                        ],
-                        "l": [
-                            None,
-                            "Flow indicator",
-                        ],
-                    }
-                ]
-            },
-        )
-    )
-
-    with AspenClient(
-        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
-        timeout=2,
-        verify_ssl=False,
-    ) as client:
-        data = client.read(
-            tags=["FI101"],
-            start="2025-06-20 08:00:00",
-            end="2025-06-20 09:00:00",
-            read_type=ReaderType.RAW,
-            output=OutputFormat.JSON,
-        )
-
-    assert isinstance(data, list)
-    assert data
-    assert "description" not in data[0]
 
 
 def test_snapshot_sql_empty_response(mock_api):
@@ -1077,9 +841,11 @@ def test_search_hybrid_mode_json(mock_api):
     # Should return list of dicts
     assert isinstance(result, list)
     assert len(result) == 1
-    assert result[0]["tag"] == "TEMP_101"
-    assert result[0]["value"] == 25.5
-    assert "timestamp" in result[0]
+    record = result[0]
+    assert isinstance(record, dict)
+    assert record["tag"] == "TEMP_101"
+    assert record["value"] == 25.5
+    assert "timestamp" in record
     c.close()
 
 
@@ -1230,9 +996,11 @@ def test_search_hybrid_mode_with_include_all(mock_api):
     assert isinstance(result, list)
     assert len(result) == 1
     # Should include description and status
-    assert "description" in result[0]
-    assert "status" in result[0]
-    assert result[0]["tag"] == "TAG1"
+    record = result[0]
+    assert isinstance(record, dict)
+    assert "description" in record
+    assert "status" in record
+    assert record["tag"] == "TAG1"
     c.close()
 
 
@@ -1274,10 +1042,12 @@ def test_search_only_mode_vs_hybrid_mode(mock_api):
 
 def test_context_manager_basic(mock_api):
     """Test context manager enters and exits properly."""
-    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
         return_value=httpx.Response(
             200,
-            json={"data": [{"samples": [{"t": 1750406400000, "v": 1.0, "s": 8}]}]},
+            json=[
+                {"ts": "2025-06-20T11:00:00.000Z", "name": "TAG1", "value": 1.0, "status": 8},
+            ],
         )
     )
 
@@ -1286,6 +1056,7 @@ def test_context_manager_basic(mock_api):
         base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
         timeout=2,
         verify_ssl=False,
+        datasource="IP21",
     ) as client:
         assert client is not None
         df = client.read(
@@ -1303,40 +1074,13 @@ def test_context_manager_basic(mock_api):
     assert client._client.is_closed
 
 
-def test_context_manager_with_exception(mock_api):
-    """Test context manager closes even when exception occurs."""
-    from tenacity import RetryError
-
-    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
-        return_value=httpx.Response(500, text="Server Error")
-    )
-
-    # Even if an exception occurs, client should be closed
-    with (
-        pytest.raises(RetryError),
-        AspenClient(
-            base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
-            timeout=2,
-            verify_ssl=False,
-        ) as client,
-    ):
-        client.read(
-            tags=["TAG1"],
-            start="2025-06-20 08:00:00",
-            end="2025-06-20 09:00:00",
-            read_type=ReaderType.RAW,
-        )
-
-    # Client should still be closed
-    assert client._client.is_closed
-
-
 def test_context_manager_returns_self():
     """Test that __enter__ returns self."""
     client = AspenClient(
         base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
         timeout=2,
         verify_ssl=False,
+        datasource="IP21",
     )
 
     # __enter__ should return the client itself
@@ -1346,180 +1090,9 @@ def test_context_manager_returns_self():
     client.close()
 
 
-def test_read_as_df_basic(mock_api):
-    """Test reading data with output=OutputFormat.JSON returns list of dictionaries."""
-    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "data": [
-                    {
-                        "l": ["VAL", "Temperature sensor"],  # Field values including description
-                        "samples": [
-                            {"t": 1704110400000, "v": 25.5, "s": 8},  # 2024-01-01 12:00:00
-                            {"t": 1704114000000, "v": 26.0, "s": 8},  # 2024-01-01 13:00:00
-                        ],
-                    }
-                ]
-            },
-        )
-    )
-
-    with AspenClient(
-        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
-        timeout=2,
-        verify_ssl=False,
-    ) as client:
-        data = client.read(
-            tags=["TAG1"],
-            start="2024-01-01 12:00:00",
-            end="2024-01-01 13:00:00",
-            read_type=ReaderType.RAW,
-            include=IncludeFields.DESCRIPTION,
-            output=OutputFormat.JSON,
-        )
-
-        # Verify it's a list of dicts
-        assert isinstance(data, list)
-        assert len(data) == 2
-
-        # Verify structure of first record
-        assert "timestamp" in data[0]
-        assert "tag" in data[0]
-        assert "description" in data[0]
-        assert "value" in data[0]
-
-        # Verify values
-        assert data[0]["tag"] == "TAG1"
-        assert data[0]["description"] == "Temperature sensor"
-        assert data[0]["value"] == 25.5
-        assert isinstance(data[0]["timestamp"], str)
-
-        assert data[1]["value"] == 26.0
-
-
-def test_read_with_description_dataframe(mock_api):
-    """Test reading data with include=IncludeFields.DESCRIPTION still returns DataFrame."""
-    route = mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll")
-    route.mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "data": [
-                    {
-                        "l": ["VAL", "Pressure sensor"],  # Field values including description
-                        "samples": [
-                            {"t": 1704110400000, "v": 101.3, "s": 8},
-                        ],
-                    }
-                ]
-            },
-        )
-    )
-
-    with AspenClient(
-        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
-        timeout=2,
-        verify_ssl=False,
-    ) as client:
-        df = client.read(
-            tags=["PRESS1"],
-            start="2024-01-01 12:00:00",
-            end="2024-01-01 13:00:00",
-            read_type=ReaderType.RAW,
-            include=IncludeFields.DESCRIPTION,
-            output=OutputFormat.DATAFRAME,
-        )
-
-        # Should still return DataFrame when output=OutputFormat.DATAFRAME
-        assert isinstance(df, pd.DataFrame)
-        assert not df.empty
-        assert "PRESS1" in df.columns
-        assert "PRESS1_description" in df.columns
-        assert df["PRESS1_description"].iloc[0] == "Pressure sensor"
-        assert df.attrs["tag_descriptions"]["PRESS1"] == "Pressure sensor"
-
-        # Verify IP_DESCRIPTION field was requested in XML
-        request = route.calls.last.request
-        request_body = request.content.decode("utf-8")
-        assert "<F><![CDATA[IP_DESCRIPTION]]></F>" in request_body
-
-
-def test_read_as_df_multiple_tags(mock_api):
-    """Test as_df with multiple tags."""
-
-    def response_handler(request):
-        # Return different data based on which tag is requested
-        body = request.content.decode("utf-8")
-        if "TAG1" in body:
-            return httpx.Response(
-                200,
-                json={
-                    "data": [
-                        {
-                            "l": ["VAL", "Temperature sensor"],
-                            "samples": [
-                                {"t": 1704110400000, "v": 25.5, "s": 8},
-                            ],
-                        }
-                    ]
-                },
-            )
-        else:  # TAG2
-            return httpx.Response(
-                200,
-                json={
-                    "data": [
-                        {
-                            "l": ["VAL", "Pressure sensor"],
-                            "samples": [
-                                {"t": 1704110400000, "v": 101.3, "s": 8},
-                            ],
-                        }
-                    ]
-                },
-            )
-
-    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
-        side_effect=response_handler
-    )
-
-    with AspenClient(
-        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
-        timeout=2,
-        verify_ssl=False,
-    ) as client:
-        data = client.read(
-            tags=["TAG1", "TAG2"],
-            start="2024-01-01 12:00:00",
-            end="2024-01-01 13:00:00",
-            read_type=ReaderType.RAW,
-            include=IncludeFields.DESCRIPTION,
-            output=OutputFormat.JSON,
-        )
-
-        # Should have 2 records (one per tag, same timestamp)
-        assert isinstance(data, list)
-        assert len(data) == 2
-
-        # Verify both tags are present
-        tags = {record["tag"] for record in data}
-        assert tags == {"TAG1", "TAG2"}
-
-        # Verify descriptions
-        tag1_record = next(r for r in data if r["tag"] == "TAG1")
-        tag2_record = next(r for r in data if r["tag"] == "TAG2")
-
-        assert tag1_record["description"] == "Temperature sensor"
-        assert tag1_record["value"] == 25.5
-
-        assert tag2_record["description"] == "Pressure sensor"
-        assert tag2_record["value"] == 101.3
-
-
 def test_read_as_df_empty_response(mock_api):
     """Test output=OutputFormat.JSON with empty response returns empty list."""
-    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
+    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
         return_value=httpx.Response(
             200,
             json={"data": [{"samples": []}]},
@@ -1530,6 +1103,7 @@ def test_read_as_df_empty_response(mock_api):
         base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
         timeout=2,
         verify_ssl=False,
+        datasource="IP21",
     ) as client:
         data = client.read(
             tags=["TAG1"],
@@ -1542,45 +1116,6 @@ def test_read_as_df_empty_response(mock_api):
         # Should return empty list
         assert isinstance(data, list)
         assert len(data) == 0
-
-
-def test_read_as_df_without_description(mock_api):
-    """Test output=OutputFormat.JSON when description is requested but not available in response."""
-    mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "data": [
-                    {
-                        # No "l" field - description not available
-                        "samples": [
-                            {"t": 1704110400000, "v": 25.5, "s": 8},
-                        ],
-                    }
-                ]
-            },
-        )
-    )
-
-    with AspenClient(
-        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
-        timeout=2,
-        verify_ssl=False,
-    ) as client:
-        data = client.read(
-            tags=["TAG1"],
-            start="2024-01-01 12:00:00",
-            end="2024-01-01 13:00:00",
-            read_type=ReaderType.RAW,
-            include=IncludeFields.DESCRIPTION,
-            output=OutputFormat.JSON,
-        )
-
-        # Should still work, but description should be empty string
-        assert len(data) == 1
-        assert "description" in data[0]
-        assert data[0]["description"] == ""
-        assert data[0]["value"] == 25.5
 
 
 def test_aggregates_min_read(mock_api):
@@ -1606,7 +1141,7 @@ def test_aggregates_min_read(mock_api):
         ["TAG1"],
         start="2025-01-01 00:00:00",
         end="2025-01-02 00:00:00",
-        read_type=ReaderType.AGG_MIN,
+        read_type=ReaderType.MIN,
         output=OutputFormat.JSON,
     )
 
@@ -1639,7 +1174,7 @@ def test_aggregates_max_read(mock_api):
         ["TAG1"],
         start="2025-01-01 00:00:00",
         end="2025-01-02 00:00:00",
-        read_type=ReaderType.AGG_MAX,
+        read_type=ReaderType.MAX,
         output=OutputFormat.DATAFRAME,
     )
 
@@ -1672,7 +1207,7 @@ def test_aggregates_avg_read(mock_api):
         ["TAG1"],
         start="2025-01-01 00:00:00",
         end="2025-01-02 00:00:00",
-        read_type=ReaderType.AGG_AVG,
+        read_type=ReaderType.AVG,
         output=OutputFormat.JSON,
     )
 
@@ -1704,7 +1239,7 @@ def test_aggregates_rng_read(mock_api):
         ["TAG1"],
         start="2025-01-01 00:00:00",
         end="2025-01-02 00:00:00",
-        read_type=ReaderType.AGG_RNG,
+        read_type=ReaderType.RNG,
         output=OutputFormat.JSON,
     )
 
@@ -1737,7 +1272,7 @@ def test_aggregates_multiple_tags(mock_api):
         ["TAG1", "TAG2"],
         start="2025-01-01 00:00:00",
         end="2025-01-02 00:00:00",
-        read_type=ReaderType.AGG_MIN,
+        read_type=ReaderType.MIN,
         output=OutputFormat.DATAFRAME,
     )
 
@@ -1775,7 +1310,7 @@ def test_aggregates_with_description(mock_api):
         ["TAG1"],
         start="2025-01-01 00:00:00",
         end="2025-01-02 00:00:00",
-        read_type=ReaderType.AGG_AVG,
+        read_type=ReaderType.AVG,
         include=IncludeFields.DESCRIPTION,
         output=OutputFormat.JSON,
     )

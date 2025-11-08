@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from ..query_builder import build_aggregates_sql_query
+from ..query_builder import SqlAggregatesQueryBuilder
 from .base_reader import BaseReader
 from .response_parser import SqlAggregatesResponseParser
 
@@ -44,7 +44,7 @@ class AggregatesReader(BaseReader):
 
         # Handle aggregate reads with datasource configured
         return (
-            read_type in (RT.AGG_MIN, RT.AGG_MAX, RT.AGG_AVG, RT.AGG_RNG)
+            read_type in (RT.MIN, RT.MAX, RT.AVG, RT.RNG)
             and bool(self.datasource)
             and start is not None
             and end is not None
@@ -68,7 +68,7 @@ class AggregatesReader(BaseReader):
             start: Start timestamp
             end: End timestamp
             interval: Not used for aggregates (period is calculated from start/end)
-            read_type: Type of aggregation (AGG_MIN, AGG_MAX, AGG_AVG, AGG_RNG)
+            read_type: Type of aggregation (MIN, MAX, AVG, RNG)
             include_status: Not supported for aggregates (ignored)
             max_rows: Maximum rows (not typically applicable for aggregates)
             with_description: Include tag descriptions
@@ -82,7 +82,8 @@ class AggregatesReader(BaseReader):
         assert start is not None
         assert end is not None
 
-        xml_query = build_aggregates_sql_query(
+        builder = SqlAggregatesQueryBuilder()
+        xml_query = builder.build(
             tags=tags,
             start=start,
             end=end,
@@ -105,10 +106,10 @@ class AggregatesReader(BaseReader):
         from ..models import ReaderType as RT
 
         value_column_map = {
-            RT.AGG_MIN: "min",
-            RT.AGG_MAX: "max",
-            RT.AGG_AVG: "avg",
-            RT.AGG_RNG: "rng",
+            RT.MIN: "min",
+            RT.MAX: "max",
+            RT.AVG: "avg",
+            RT.RNG: "rng",
         }
         value_column = value_column_map[read_type]
 
