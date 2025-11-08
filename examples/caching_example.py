@@ -84,7 +84,7 @@ with AspenClient(
         print("  Speedup: >1000x faster! (cache time < 0.001s)")
 
     # Verify data is identical
-    print(f"\nData comparison:")
+    print("\nData comparison:")
     print(f"  data1 == data2: {data1 == data2}")
     print(f"  Both have {len(data1) if isinstance(data1, list) else 0} data points")
 
