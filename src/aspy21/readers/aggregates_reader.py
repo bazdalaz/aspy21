@@ -107,6 +107,21 @@ class AggregatesReader(BaseReader):
         )
         response.raise_for_status()
 
+        logger.debug(f"Response status: {response.status_code}")
+        logger.debug(f"Response headers: {dict(response.headers)}")
+        logger.debug(f"Response content-type: {response.headers.get('content-type', 'unknown')}")
+        logger.debug(f"Response text (first 1000 chars): {response.text[:1000]}")
+
+        # Parse response as JSON
+        try:
+            response_data = response.json()
+            logger.debug(f"Parsed JSON type: {type(response_data)}")
+            logger.debug(f"Parsed JSON content: {response_data}")
+        except Exception as e:
+            logger.error(f"Failed to parse response as JSON: {e}")
+            logger.error(f"Response text: {response.text[:2000]}")
+            raise
+
         # Determine which value column to extract
         from ..models import ReaderType as RT
 
@@ -119,7 +134,6 @@ class AggregatesReader(BaseReader):
         value_column = value_column_map[read_type]
 
         # Parse SQL response using aggregates parser
-        response_data = response.json()
         frames, tag_descriptions = self.parser.parse(
             response=response_data,
             tag_names=tags,

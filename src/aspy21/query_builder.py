@@ -6,11 +6,14 @@ Each builder handles a specific query format (XML endpoint, SQL history, SQL sna
 
 from __future__ import annotations
 
+import logging
 from abc import ABC
 
 import pandas as pd
 
 from .models import ReaderType
+
+logger = logging.getLogger(__name__)
 
 
 class QueryBuilder(ABC):  # noqa: B024
@@ -481,11 +484,13 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
         # - If no interval: period = (end - start) * 10 (returns single value)
         if interval:
             period_tenths = interval * 10
+            logger.debug(f"Using interval={interval}s, period={period_tenths} tenths of seconds")
         else:
             start_dt = pd.to_datetime(start)
             end_dt = pd.to_datetime(end)
             period_seconds = int((end_dt - start_dt).total_seconds())
             period_tenths = period_seconds * 10
+            logger.debug(f"Period from time range: {period_seconds}s = {period_tenths} tenths")
 
         # Map ReaderType to SQL column name
         agg_column_map = {
@@ -519,6 +524,7 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
 
         # Combine with UNION ALL for multiple tags
         full_sql = " UNION ALL ".join(sql_queries)
+        logger.debug(f"Generated SQL query: {full_sql}")
 
         # Wrap in XML format
         root = ET.Element("Sql")
@@ -526,7 +532,9 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
 
         ET.SubElement(root, "Datasource").text = datasource
 
-        return ET.tostring(root, encoding="unicode")
+        xml_result = ET.tostring(root, encoding="unicode")
+        logger.debug(f"Generated XML: {xml_result}")
+        return xml_result
 
 
 def build_aggregates_sql_query(
