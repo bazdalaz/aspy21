@@ -474,15 +474,12 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
         # Convert tags to list if string
         tags_list = [tags] if isinstance(tags, str) else tags
 
-        # Calculate period as end - start
+        # Calculate period as end - start in tenths of seconds
+        # Aspen aggregates table expects period in tenths of seconds
         start_dt = pd.to_datetime(start)
         end_dt = pd.to_datetime(end)
         period_seconds = int((end_dt - start_dt).total_seconds())
-
-        # Convert to HH:MM format (as expected by Aspen aggregates table)
-        hours = period_seconds // 3600
-        minutes = (period_seconds % 3600) // 60
-        period_str = f"{hours:02d}:{minutes:02d}"
+        period_tenths = period_seconds * 10  # Convert to tenths of seconds
 
         # Map ReaderType to SQL column name
         agg_column_map = {
@@ -510,7 +507,7 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
                 f"SELECT {select_clause} FROM aggregates "
                 f"WHERE name = '{tag}' "
                 f"AND ts BETWEEN '{start}' AND '{end}' "
-                f"AND period = '{period_str}'"
+                f"AND period = {period_tenths}"
             )
             sql_queries.append(sql)
 
