@@ -64,6 +64,32 @@ tag = test_tags[0]
 end = datetime.now() - timedelta(hours=1)
 start = end - timedelta(hours=1)
 
+
+def raw_sql(client: AspenClient, sql: str) -> str:
+    """Send SQL directly to the SQL endpoint and return the raw response text."""
+    xml = (
+        f'<SQL g="aspy21_smoke" t="SQLplus" ds={query_builder.xml_attr(datasource)} '
+        f'dso="CHARINT=N;CHARFLOAT=N;CHARTIME=N;CONVERTERRORS=N" '
+        f'm="5" to="30" response="Record" s="1">'
+        f"{query_builder.cdata(sql)}</SQL>"
+    )
+    response = client._client.post(
+        f"{client.base_url}/SQL", content=xml, headers={"Content-Type": "text/xml"}
+    )
+    response.raise_for_status()
+    return response.text[:500]
+
+
+def quote_round_trip(client: AspenClient) -> str:
+    """Select an escaped literal; the server must return it with a single quote."""
+    literal = query_builder.sql_literal("O'Brien")
+    sql = f"Select name, {literal} q from all_records where name = {query_builder.sql_literal(tag)}"
+    text = raw_sql(client, sql)
+    if "O'Brien" not in text:
+        raise AssertionError(f"'O''Brien' did not come back as O'Brien. Raw response: {text}")
+    return text
+
+
 with AspenClient(
     base_url=base_url,
     auth=(username, password),
@@ -72,6 +98,10 @@ with AspenClient(
     verify_ssl=verify_ssl,
 ) as c:
     checks = {
+        "escaped quote round-trip (escaping)": lambda: quote_round_trip(c),
+        "broken quote, raw response (control)": lambda: raw_sql(
+            c, f"Select name from all_records where name = 'O'Brien' or name = '{tag}'"
+        ),
         "browse search": lambda: c.search(tag=tag[:3] + "*", limit=5),
         "description search": lambda: c.search(description="temp", limit=5),
         "quote in description (escaping)": lambda: c.search(description="O'Brien", limit=5),
