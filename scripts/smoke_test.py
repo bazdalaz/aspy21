@@ -1,34 +1,75 @@
 """Smoke test for the SQL/XML escaping fix against a real IP.21 server.
 
+Reads connection settings from .env in the project root, the same way as
+examples/basic_usage.py (see .env.example). The first tag in ASPEN_TEST_TAGS
+is used for the read checks.
+
 Usage:
-    ASPEN_BASE_URL=... ASPEN_USER=... ASPEN_PASS=... ASPEN_DATASOURCE=IP21 \
-    ASPEN_TAG=<a real tag> python scripts/smoke_test.py
+    pip install ".[examples]"
+    python scripts/smoke_test.py
 """
 
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 import aspy21
-from aspy21 import AspenClient, ReaderType
+from aspy21 import AspenClient, ReaderType, configure_logging
+
+# Load .env from project root
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(env_path)
+
+# Configure logging from ASPEN_LOG_LEVEL environment variable
+configure_logging()
+
+# Get configuration from environment
+base_url = os.getenv("ASPEN_BASE_URL")
+username = os.getenv("ASPEN_USERNAME")
+password = os.getenv("ASPEN_PASSWORD")
+datasource = os.getenv("ASPEN_DATASOURCE", "")
+timeout = float(os.getenv("ASPEN_TIMEOUT", "60.0"))
+test_tags = [t.strip() for t in os.getenv("ASPEN_TEST_TAGS", "").split(",") if t.strip()]
+verify_ssl = os.getenv("ASPEN_VERIFY_SSL", "False").lower() == "true"
+
+# Validate required variables
+if not all([base_url, username, password, datasource, test_tags]):
+    print("ERROR: Missing required environment variables!")
+    print(
+        "Required: ASPEN_BASE_URL, ASPEN_USERNAME, ASPEN_PASSWORD, "
+        "ASPEN_DATASOURCE, ASPEN_TEST_TAGS"
+    )
+    print(f"Looked for .env at: {env_path}")
+    exit(1)
+
+# Type narrowing: assert non-None after validation
+assert base_url is not None
+assert username is not None
+assert password is not None
 
 print(f"aspy21 {aspy21.__version__} from {aspy21.__file__}")
+print(f"Base URL: {base_url}")
+print(f"Datasource: {datasource}")
+print(f"Tag: {test_tags[0]}\n")
 
-tag = os.environ["ASPEN_TAG"]
+tag = test_tags[0]
 end = datetime.now() - timedelta(hours=1)
 start = end - timedelta(hours=1)
 
 with AspenClient(
-    base_url=os.environ["ASPEN_BASE_URL"],
-    auth=(os.environ["ASPEN_USER"], os.environ["ASPEN_PASS"]),
-    datasource=os.environ["ASPEN_DATASOURCE"],
+    base_url=base_url,
+    auth=(username, password),
+    datasource=datasource,
+    timeout=timeout,
+    verify_ssl=verify_ssl,
 ) as c:
     checks = {
         "browse search": lambda: c.search(tag=tag[:3] + "*", limit=5),
         "description search": lambda: c.search(description="temp", limit=5),
         "quote in description (escaping)": lambda: c.search(description="O'Brien", limit=5),
-        "quote in tag pattern (escaping)": lambda: c.search(
-            tag="X'*", description="temp", limit=5
-        ),
+        "quote in tag pattern (escaping)": lambda: c.search(tag="X'*", description="temp", limit=5),
         "history read (INT)": lambda: c.read(
             [tag], start=start.isoformat(), end=end.isoformat(), interval=600
         )[:3],
