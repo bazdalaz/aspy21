@@ -17,7 +17,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 import aspy21
-from aspy21 import AspenClient, ReaderType, configure_logging, query_builder
+from aspy21 import AspenClient, AspenSqlError, ReaderType, configure_logging, query_builder
+from aspy21.errors import raise_for_sql_error
 
 # Fail fast if an older aspy21 (e.g. from PyPI) is installed instead of this checkout
 if not hasattr(query_builder, "sql_literal"):
@@ -66,19 +67,19 @@ end = datetime.now() - timedelta(hours=1)
 start = end - timedelta(hours=1)
 
 
-def raw_sql(client: AspenClient, sql: str) -> str:
+def raw_sql(client: AspenClient, sql: str, mode: str = "Record") -> str:
     """Send SQL directly to the SQL endpoint and return the raw response text."""
     xml = (
         f'<SQL g="aspy21_smoke" t="SQLplus" ds={query_builder.xml_attr(datasource)} '
         f'dso="CHARINT=N;CHARFLOAT=N;CHARTIME=N;CONVERTERRORS=N" '
-        f'm="5" to="30" response="Record" s="1">'
+        f'm="5" to="30" response="{mode}" s="1">'
         f"{query_builder.cdata(sql)}</SQL>"
     )
     response = client._client.post(
         f"{client.base_url}/SQL", content=xml, headers={"Content-Type": "text/xml"}
     )
     response.raise_for_status()
-    return response.text[:500]
+    return response.text
 
 
 def round_trip(client: AspenClient, value: str) -> str:
@@ -103,6 +104,16 @@ def injection_control(client: AspenClient) -> str:
     if '"name"' not in text:
         raise AssertionError(f"Unescaped payload returned no rows, control is invalid: {text}")
     return text
+
+
+def sql_error_detected(client: AspenClient, mode: str) -> str:
+    """Send invalid SQL; aspy21 must recognize the server's error response."""
+    text = raw_sql(client, "Select name from all_records where name = 'O'Brien'", mode)
+    try:
+        raise_for_sql_error(json.loads(text))
+    except AspenSqlError as e:
+        return f"{e} | raw: {text[:300]}"
+    raise AssertionError(f"Error response not recognized. Raw response: {text[:500]}")
 
 
 def expect_empty(result: object) -> object:
@@ -132,9 +143,8 @@ with AspenClient(
         "payload via history read (injection)": lambda: expect_empty(
             c.read([INJECTION], start=start.isoformat(), end=end.isoformat(), interval=600)
         ),
-        "broken quote, raw response (control)": lambda: raw_sql(
-            c, f"Select name from all_records where name = 'O'Brien' or name = '{tag}'"
-        ),
+        "SQL error detected, Record format (errors)": lambda: sql_error_detected(c, "Record"),
+        "SQL error detected, Original format (errors)": lambda: sql_error_detected(c, "Original"),
         "browse search": lambda: c.search(tag=tag[:3] + "*", limit=5),
         "description search": lambda: c.search(description="temp", limit=5),
         "quote in description (escaping)": lambda: c.search(description="O'Brien", limit=5),

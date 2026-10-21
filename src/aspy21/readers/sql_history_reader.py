@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from ..errors import raise_for_sql_error
 from ..query_builder import SqlHistoryQueryBuilder
 from .base_reader import BaseReader
 from .response_parser import SqlHistoryResponseParser
@@ -118,6 +119,8 @@ class SqlHistoryReader(BaseReader):
             raise ValueError(
                 f"SQL endpoint returned non-JSON response: {response.text[:200]}"
             ) from e
+
+        raise_for_sql_error(sql_response)
 
         logger.debug(f"SQL response type: {type(sql_response)}")
         response_length = len(sql_response) if isinstance(sql_response, list) else "N/A"

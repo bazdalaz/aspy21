@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from ..errors import raise_for_sql_error
 from ..query_builder import SqlSnapshotQueryBuilder
 from .base_reader import BaseReader
 from .response_parser import SqlSnapshotResponseParser
@@ -87,6 +88,11 @@ class SnapshotReader(BaseReader):
             snapshot_time = snapshot_time.tz_convert("UTC")
         snapshot_time = snapshot_time.tz_convert(None)
 
+        # IP.21 returns an empty body when none of the requested tags exist
+        if not response.text or response.headers.get("content-length") == "0":
+            logger.warning("Snapshot SQL endpoint returned empty response (unknown tags?)")
+            return [], {}
+
         try:
             sql_response = response.json()
         except Exception as e:
@@ -96,6 +102,8 @@ class SnapshotReader(BaseReader):
             logger.error(f"Response content: {response.text[:1000]}")
             message = "Failed to parse JSON response from snapshot SQL endpoint"
             raise ValueError(message) from e
+
+        raise_for_sql_error(sql_response)
 
         snapshot_frame, snapshot_descriptions = self.parser.parse(
             sql_response,

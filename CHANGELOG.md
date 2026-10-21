@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- SQL errors returned by IP.21 with HTTP 200 (`AtPD_ErrorCode` records, or `result.er` in
+  search responses) are now raised as `AspenSqlError` instead of being reported as "no data"
+- Snapshot reads of unknown tags no longer fail with "Failed to parse JSON response" when
+  the server returns an empty body; they return no data
+- Response parsers no longer turn unexpected failures into empty results
+- Empty read results are no longer cached, so a transient empty response is not pinned
+  for the historical TTL (24h by default)
+
+### Added
+- `AspenSqlError` exception (subclass of `ValueError`, so existing handlers keep working)
+
 ## [0.0.5] - 2026-10-21
 
 **Security Release** - Fixes SQL and XML injection in query building. Upgrading is recommended.

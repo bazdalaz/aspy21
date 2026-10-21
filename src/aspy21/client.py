@@ -10,6 +10,7 @@ import httpx
 import pandas as pd
 
 from .cache import AspenCache, CacheConfig
+from .errors import raise_for_sql_error
 from .models import IncludeFields, OutputFormat, ReaderType
 from .query_builder import SqlSearchQueryBuilder
 
@@ -420,8 +421,9 @@ class AspenClient:
         )
 
         # Cache the result if enabled
-        # Only cache historical data with long TTL to avoid caching current values
-        if self._cache and self._is_historical_data(end):
+        # Only cache historical data with long TTL to avoid caching current values.
+        # Empty results are not cached: they may be transient (e.g. data not yet archived).
+        if self._cache and self._is_historical_data(end) and len(result) > 0:
             cache_operation = self._determine_cache_operation(effective_read_type, start, end)
             cache_key_params = {
                 "tags": tags,
@@ -490,7 +492,8 @@ class AspenClient:
             response.raise_for_status()
 
             data = response.json()
-            logger.debug(f"SQL response keys: {list(data.keys())}")
+            raise_for_sql_error(data)
+            logger.debug(f"SQL response type: {type(data).__name__}")
 
             # Parse SQL response format
             # Expected: {"data": [{"g": "...", "r": "D", "cols": [...], "rows": [{"fld": [...]}]}]}
@@ -509,14 +512,6 @@ class AspenClient:
             if not isinstance(result_set, dict):
                 logger.warning("Unexpected result set structure")
                 return []
-
-            # Check for errors
-            if "result" in result_set:
-                result = result_set["result"]
-                if isinstance(result, dict) and result.get("er", 0) != 0:
-                    error_msg = result.get("es", "Unknown error")
-                    logger.error(f"API error from SQL endpoint: {error_msg}")
-                    raise ValueError(f"SQL API error: {error_msg}")
 
             # Get rows array
             rows = result_set.get("rows", [])

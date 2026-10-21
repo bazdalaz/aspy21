@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from ..errors import raise_for_sql_error
 from ..query_builder import SqlAggregatesQueryBuilder
 from .base_reader import BaseReader
 from .response_parser import SqlAggregatesResponseParser
@@ -131,6 +132,8 @@ class AggregatesReader(BaseReader):
             logger.error(f"Failed to parse response as JSON: {type(e).__name__}: {e}")
             logger.error(f"Response text: {response.text[:2000]}")
             raise
+
+        raise_for_sql_error(response_data)
 
         # Determine which value column to extract
         from ..models import ReaderType as RT
