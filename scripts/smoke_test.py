@@ -2,7 +2,8 @@
 
 Reads connection settings from .env in the project root, the same way as
 examples/basic_usage.py (see .env.example). The first tag in ASPEN_TEST_TAGS
-is used for the read checks.
+is used for the read checks; the last one for the aggregate checks (use a numeric tag,
+e.g. ASPEN_TEST_TAGS=GXV1255.PV,CTI4551.PV).
 
 Usage:
     pip install ".[examples]"
@@ -60,9 +61,11 @@ assert password is not None
 print(f"aspy21 {aspy21.__version__} from {aspy21.__file__}")
 print(f"Base URL: {base_url}")
 print(f"Datasource: {datasource}")
-print(f"Tag: {test_tags[0]}\n")
+print(f"Tag: {test_tags[0]}")
+print(f"Aggregate tag (last in ASPEN_TEST_TAGS, use a numeric tag): {test_tags[-1]}\n")
 
 tag = test_tags[0]
+agg_tag = test_tags[-1]
 end = datetime.now() - timedelta(hours=1)
 start = end - timedelta(hours=1)
 
@@ -154,7 +157,14 @@ with AspenClient(
         )[:3],
         "snapshot read": lambda: c.read([tag]),
         "aggregate read (AVG)": lambda: c.read(
-            [tag], start=start.isoformat(), end=end.isoformat(), read_type=ReaderType.AVG
+            [agg_tag], start=start.isoformat(), end=end.isoformat(), read_type=ReaderType.AVG
+        ),
+        "aggregate read (AVG, 10 min interval)": lambda: c.read(
+            [agg_tag],
+            start=start.isoformat(),
+            end=end.isoformat(),
+            read_type=ReaderType.AVG,
+            interval=600,
         ),
     }
     failed = 0

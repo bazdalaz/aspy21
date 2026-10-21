@@ -9,10 +9,20 @@ from __future__ import annotations
 import logging
 from abc import ABC
 from collections import defaultdict
+from typing import Any
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+
+def _first_not_none(record: dict, *keys: str) -> Any:
+    """Return the first value for keys that is not None (0 and "" are valid values)."""
+    for key in keys:
+        value = record.get(key)
+        if value is not None:
+            return value
+    return None
 
 
 class ResponseParser(ABC):  # noqa: B024
@@ -329,7 +339,7 @@ class SqlAggregatesResponseParser(ResponseParser):
             rows = []
             for record in records_for_tag:
                 # Timestamp might be in different fields
-                ts_value = record.get("ts") or record.get("ip_trend_time")
+                ts_value = _first_not_none(record, "ts", "ip_trend_time")
                 if ts_value is None:
                     logger.warning(f"Record missing timestamp: {record}")
                     continue
@@ -337,7 +347,7 @@ class SqlAggregatesResponseParser(ResponseParser):
                 timestamp = pd.to_datetime(ts_value)
 
                 # Value column might have prefix
-                value = record.get(value_column) or record.get(f"ip_{value_column}")
+                value = _first_not_none(record, value_column, f"ip_{value_column}")
                 if value is None:
                     logger.warning(
                         f"Record missing value column '{value_column}': {list(record.keys())}"

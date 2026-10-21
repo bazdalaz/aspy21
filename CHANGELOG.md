@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   silently returned no data. Timestamps are now converted like history reads
 - Timestamps in queries used locale-dependent month names (e.g. `Okt` on a German
   system), which IP.21 cannot parse. Month names are now always English
+- Aggregate values of exactly 0 (e.g. a range or average of zero) were dropped as
+  "missing" because of a truthiness check; they are now returned
 
 ### Added
 - `AspenSqlError` exception (subclass of `ValueError`, so existing handlers keep working)

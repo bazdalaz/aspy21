@@ -1,6 +1,7 @@
 """Comprehensive tests for response parsers, focusing on error handling and edge cases."""
 
 import pandas as pd
+import pytest
 
 from aspy21.readers.response_parser import (
     SqlAggregatesResponseParser,
@@ -337,6 +338,32 @@ class TestSqlAggregatesResponseParser:
         # Should handle missing value column
         assert isinstance(frames, list)
         assert isinstance(descriptions, dict)
+
+    @pytest.mark.parametrize("value", [0, 0.0])
+    def test_zero_aggregate_value_is_kept(self, value):
+        """A zero average/range is valid data, not a missing value."""
+        parser = SqlAggregatesResponseParser()
+        frames, _ = parser.parse(
+            response=[{"ts": "2025-01-01T00:00:00Z", "name": "TAG1", "avg": value}],
+            tag_names=["TAG1"],
+            value_column="avg",
+            max_rows=1000,
+        )
+
+        assert len(frames) == 1
+        assert frames[0]["TAG1"].tolist() == [value]
+
+    def test_null_aggregate_value_is_skipped(self):
+        """IP.21 returns avg=null for tags that cannot be averaged (e.g. text values)."""
+        parser = SqlAggregatesResponseParser()
+        frames, _ = parser.parse(
+            response=[{"ts": "2025-01-01T00:00:00Z", "name": "TAG1", "avg": None}],
+            tag_names=["TAG1"],
+            value_column="avg",
+            max_rows=1000,
+        )
+
+        assert frames == []
 
     def test_tag_name_field_variations(self):
         """Test tag name extraction from different field names."""
