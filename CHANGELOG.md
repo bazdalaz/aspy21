@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-10-21
+
+**Security Release** - Fixes SQL and XML injection in query building. Upgrading is recommended.
+
+### Security
+- Escape single quotes in all SQL string literals (tag names, search patterns, timestamps).
+  Previously a tag or search value containing `'` could alter the SQLplus query,
+  e.g. `search(description="x' or '1'='1")`
+- Escape the datasource name in the XML request attribute
+- Reject query values containing `]]>`, which could break out of the CDATA section
+- Coerce `interval` and `limit` to integers before building queries
+
+### Removed
+- Unused internal `XmlHistoryResponseParser` and `cached()` decorator (never exported)
+
+### Added
+- `scripts/smoke_test.py` for checking a build against a live IP.21 server
+
 ## [0.0.2] - 2025-11-08
 
 **Performance & Caching Release** - Adds intelligent caching layer to reduce API load and improve performance.
