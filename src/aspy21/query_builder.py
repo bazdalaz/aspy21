@@ -8,12 +8,54 @@ from __future__ import annotations
 
 import logging
 from abc import ABC
+from xml.sax.saxutils import quoteattr
 
 import pandas as pd
 
 from .models import ReaderType
 
 logger = logging.getLogger(__name__)
+
+
+def sql_literal(value: str) -> str:
+    """Quote a value as a SQL string literal, doubling embedded single quotes.
+
+    Args:
+        value: Raw value (tag name, pattern, timestamp)
+
+    Returns:
+        Quoted literal safe to embed in a SQLplus query, e.g. 'O''BRIEN'
+    """
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def xml_attr(value: str) -> str:
+    """Quote a value as an XML attribute (including surrounding quotes).
+
+    Args:
+        value: Raw attribute value
+
+    Returns:
+        Escaped, double-quoted attribute value
+    """
+    return quoteattr(str(value), {'"': "&quot;"})
+
+
+def cdata(sql: str) -> str:
+    """Wrap SQL text in a CDATA section.
+
+    Args:
+        sql: SQL query text
+
+    Returns:
+        CDATA section containing the query
+
+    Raises:
+        ValueError: If the text contains the CDATA terminator "]]>"
+    """
+    if "]]>" in sql:
+        raise ValueError("Query parameters must not contain ']]>'")
+    return f"<![CDATA[{sql}]]>"
 
 
 class QueryBuilder(ABC):  # noqa: B024
@@ -93,10 +135,10 @@ class SqlHistoryQueryBuilder(QueryBuilder):
         # Build WHERE clause with request parameter
         # Use IN clause for multiple tags, single equality for one tag
         if len(tags_list) == 1:
-            name_clause = f"name='{tags_list[0]}'"
+            name_clause = f"name={sql_literal(tags_list[0])}"
         else:
             # Build IN clause with quoted tag names
-            tag_list_str = ", ".join(f"'{tag}'" for tag in tags_list)
+            tag_list_str = ", ".join(sql_literal(tag) for tag in tags_list)
             name_clause = f"name in ({tag_list_str})"
 
         where_clauses = [
@@ -107,7 +149,7 @@ class SqlHistoryQueryBuilder(QueryBuilder):
 
         # Add period if interval is specified (convert seconds to tenths of seconds)
         if interval is not None:
-            period = interval * 10  # Convert seconds to tenths of seconds
+            period = int(interval) * 10  # Convert seconds to tenths of seconds
             where_clauses.append(f"period={period}")
 
         where_clause = " and ".join(where_clauses)
@@ -117,10 +159,10 @@ class SqlHistoryQueryBuilder(QueryBuilder):
 
         # Build XML request for SQL endpoint with response="Record" for clean JSON arrays
         xml = (
-            f'<SQL g="aspy21_history" t="SQLplus" ds="{datasource}" '
+            f'<SQL g="aspy21_history" t="SQLplus" ds={xml_attr(datasource)} '
             f'dso="CHARINT=N;CHARFLOAT=N;CHARTIME=N;CONVERTERRORS=N" '
-            f'm="{max_rows}" to="30   " response="Record" s="1">'  # s=1 for Select
-            f"<![CDATA[{sql_query}]]>"
+            f'm="{int(max_rows)}" to="30   " response="Record" s="1">'  # s=1 for Select
+            f"{cdata(sql_query)}"
             f"</SQL>"
         )
 
@@ -157,15 +199,15 @@ class SqlSnapshotQueryBuilder(QueryBuilder):
         select_fields.append("name->ip_input_quality")
 
         select_clause = ", ".join(select_fields)
-        tag_list_str = ", ".join(f"'{tag}'" for tag in tag_list)
+        tag_list_str = ", ".join(sql_literal(tag) for tag in tag_list)
 
         sql_query = f"Select {select_clause} from all_records where name in ({tag_list_str})"
 
         xml = (
-            f'<SQL g="aspy21_snapshot" t="SQLplus" ds="{datasource}" '
+            f'<SQL g="aspy21_snapshot" t="SQLplus" ds={xml_attr(datasource)} '
             f'dso="CHARINT=N;CHARFLOAT=N;CHARTIME=N;CONVERTERRORS=N" '
             f'm="{len(tag_list)}" to="30" response="Record" s="1">'
-            f"<![CDATA[{sql_query}]]>"
+            f"{cdata(sql_query)}"
             f"</SQL>"
         )
 
@@ -200,7 +242,7 @@ class SqlSearchQueryBuilder(QueryBuilder):
             sql_pattern = f"%{sql_pattern}%"
 
         # Build WHERE clause - filter by both name and description in SQL
-        where_clauses = [f"d like '{sql_pattern}'"]
+        where_clauses = [f"d like {sql_literal(sql_pattern)}"]
 
         # Add name pattern filter if not wildcard
         if tag_pattern != "*":
@@ -208,7 +250,7 @@ class SqlSearchQueryBuilder(QueryBuilder):
             # Add wildcards to name pattern if not already present
             if "%" not in name_pattern and "_" not in name_pattern:
                 name_pattern = f"%{name_pattern}%"
-            where_clauses.append(f"name like '{name_pattern}'")
+            where_clauses.append(f"name like {sql_literal(name_pattern)}")
 
         where_clause = " and ".join(where_clauses)
 
@@ -219,10 +261,10 @@ class SqlSearchQueryBuilder(QueryBuilder):
 
         # Build XML request for SQL endpoint
         xml = (
-            f'<SQL g="aspy21_search" t="SQLplus" ds="{datasource}" '
+            f'<SQL g="aspy21_search" t="SQLplus" ds={xml_attr(datasource)} '
             f'dso="CHARINT=N;CHARFLOAT=N;CHARTIME=N;CONVERTERRORS=N" '
-            f'm="{max_results}" to="30" response="Original" s="1">'
-            f"<![CDATA[{sql_query}]]>"
+            f'm="{int(max_results)}" to="30" response="Original" s="1">'
+            f"{cdata(sql_query)}"
             f"</SQL>"
         )
 
@@ -266,7 +308,7 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
         # - If interval provided: period = interval * 10 (returns multiple values)
         # - If no interval: period = (end - start) * 10 (returns single value)
         if interval:
-            period_tenths = interval * 10
+            period_tenths = int(interval) * 10
             logger.debug(f"Using interval={interval}s, period={period_tenths} tenths of seconds")
         else:
             start_dt = pd.to_datetime(start)
@@ -299,8 +341,8 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
         for tag in tags_list:
             sql = (
                 f"SELECT {select_clause} FROM aggregates "
-                f"WHERE name = '{tag}' "
-                f"AND ts BETWEEN '{start}' AND '{end}' "
+                f"WHERE name = {sql_literal(tag)} "
+                f"AND ts BETWEEN {sql_literal(start)} AND {sql_literal(end)} "
                 f"AND period = {period_tenths}"
             )
             sql_queries.append(sql)

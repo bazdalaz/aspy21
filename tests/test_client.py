@@ -514,6 +514,27 @@ def test_search_by_description(mock_api):
     c.close()
 
 
+def test_search_by_description_escapes_quotes(mock_api):
+    """Test that quotes in search input are escaped in the SQL sent to the server."""
+    route = mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
+        return_value=httpx.Response(200, json={"data": [{"rows": []}]})
+    )
+
+    c = AspenClient(
+        base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
+        timeout=2,
+        verify_ssl=False,
+        datasource="IP21",
+    )
+
+    c.search(tag="T'*", description="O'Brien' or '1'='1")
+
+    request_body = route.calls.last.request.content.decode()
+    assert "d like '%O''Brien'' or ''1''=''1%'" in request_body
+    assert "name like 'T''%'" in request_body
+    c.close()
+
+
 def test_search_combined_filters(mock_api):
     """Test searching with both tag pattern and description using SQL endpoint."""
     # Mock SQL endpoint (POST request) - SQL WHERE clause filters server-side
