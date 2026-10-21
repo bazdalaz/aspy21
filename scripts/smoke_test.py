@@ -9,6 +9,7 @@ Usage:
     python scripts/smoke_test.py
 """
 
+import json
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -80,14 +81,34 @@ def raw_sql(client: AspenClient, sql: str) -> str:
     return response.text[:500]
 
 
-def quote_round_trip(client: AspenClient) -> str:
-    """Select an escaped literal; the server must return it with a single quote."""
-    literal = query_builder.sql_literal("O'Brien")
+def round_trip(client: AspenClient, value: str) -> str:
+    """Select an escaped literal; the server must return exactly the original value."""
+    literal = query_builder.sql_literal(value)
     sql = f"Select name, {literal} q from all_records where name = {query_builder.sql_literal(tag)}"
     text = raw_sql(client, sql)
-    if "O'Brien" not in text:
-        raise AssertionError(f"'O''Brien' did not come back as O'Brien. Raw response: {text}")
+    records = json.loads(text) if text.startswith("[") else []
+    if not records or records[0].get("q") != value:
+        raise AssertionError(f"{literal} did not come back as {value!r}. Raw response: {text}")
     return text
+
+
+# Read-only injection payload: if it escaped the literal, it would match every record
+INJECTION = "zzz_no_such_text' or name like '%"
+
+
+def injection_control(client: AspenClient) -> str:
+    """Send the payload UNESCAPED (as aspy21 0.0.4 did) to show it would return rows."""
+    sql = f"Select name from all_records where name->ip_description like '%{INJECTION}%'"
+    text = raw_sql(client, sql)
+    if '"name"' not in text:
+        raise AssertionError(f"Unescaped payload returned no rows, control is invalid: {text}")
+    return text
+
+
+def expect_empty(result: object) -> object:
+    if result:
+        raise AssertionError(f"Injection returned data: {result}")
+    return result
 
 
 with AspenClient(
@@ -98,7 +119,19 @@ with AspenClient(
     verify_ssl=verify_ssl,
 ) as c:
     checks = {
-        "escaped quote round-trip (escaping)": lambda: quote_round_trip(c),
+        "escaped quote round-trip (escaping)": lambda: round_trip(c, "O'Brien"),
+        "backslash-quote round-trip (escaping)": lambda: round_trip(c, "x\\'y\\"),
+        "unescaped payload returns rows (injection control)": lambda: injection_control(c),
+        "payload via search description (injection)": lambda: expect_empty(
+            c.search(description=INJECTION, limit=5)
+        ),
+        "payload via search tag pattern (injection)": lambda: expect_empty(
+            c.search(tag=INJECTION, description="a", limit=5)
+        ),
+        "payload via snapshot read (injection)": lambda: expect_empty(c.read([INJECTION])),
+        "payload via history read (injection)": lambda: expect_empty(
+            c.read([INJECTION], start=start.isoformat(), end=end.isoformat(), interval=600)
+        ),
         "broken quote, raw response (control)": lambda: raw_sql(
             c, f"Select name from all_records where name = 'O'Brien' or name = '{tag}'"
         ),
