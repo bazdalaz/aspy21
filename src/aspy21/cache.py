@@ -8,13 +8,11 @@ import logging
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Callable, TypeVar
+from typing import Any
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
-
-T = TypeVar("T")
 
 
 @dataclass
@@ -253,43 +251,3 @@ class AspenCache:
             self._hits = 0
             self._misses = 0
         logger.debug("Cache stats cleared")
-
-
-def cached(
-    cache_instance: AspenCache, operation: str, ttl_seconds: int | None = None
-) -> Callable[[Callable[..., T]], Callable[..., T]]:
-    """Decorator for caching function results.
-
-    Args:
-        cache_instance: Cache instance to use
-        operation: Operation type for cache key
-        ttl_seconds: Optional TTL override
-
-    Returns:
-        Decorated function with caching
-
-    Example:
-        >>> cache = AspenCache()
-        >>> @cached(cache, "expensive_op", ttl_seconds=3600)
-        ... def expensive_function(x, y):
-        ...     return x + y
-    """
-
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        def wrapper(*args: Any, **kwargs: Any) -> T:
-            # Try to get from cache
-            cached_value = cache_instance.get(operation, args=args, kwargs=kwargs)
-            if cached_value is not None:
-                return cached_value
-
-            # Execute function
-            result = func(*args, **kwargs)
-
-            # Store in cache
-            cache_instance.set(operation, result, ttl_seconds=ttl_seconds, args=args, kwargs=kwargs)
-
-            return result
-
-        return wrapper
-
-    return decorator
