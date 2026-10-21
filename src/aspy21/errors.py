@@ -15,7 +15,8 @@ def raise_for_sql_error(payload: object) -> None:
 
     Recognized formats:
         - [{"AtPD_ErrorCode": ..., "AtPD_ErrorString": "..."}]  (response="Record")
-        - {"data": [{"result": {"er": <non-zero>, "es": "..."}}]}  (response="Original")
+        - {"data": [{"r": "E", "ec": <code>, "es": "..."}]}  (response="Original")
+        - {"data": [{"result": {"er": <non-zero>, "es": "..."}}]}
         - Either error object at the top level or inside the "data" array
 
     Args:
@@ -39,6 +40,9 @@ def raise_for_sql_error(payload: object) -> None:
             continue
         if "AtPD_ErrorCode" in item:
             message = item.get("AtPD_ErrorString") or f"error code {item['AtPD_ErrorCode']}"
+            raise AspenSqlError(f"SQL API error: {message}")
+        if item.get("r") == "E" or item.get("ec", 0) != 0:
+            message = item.get("es") or item.get("aes") or f"error code {item.get('ec')}"
             raise AspenSqlError(f"SQL API error: {message}")
         result = item.get("result")
         if isinstance(result, dict) and result.get("er", 0) != 0:

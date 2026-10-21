@@ -25,6 +25,21 @@ ATPD_ERROR = [
     }
 ]
 
+# Exact error payload returned by a production IP.21 server for invalid SQL (response="Original")
+ORIGINAL_ERROR = {
+    "data": [
+        {
+            "g": "aspy21_search",
+            "r": "E",
+            "ec": -2147467259,
+            "es": "Closing quote missing for: ",
+            "aec": -2147467259,
+            "aes": "Closing quote missing for: ",
+            "s": "Select name from all_records where name = 'O'Brien'",
+        }
+    ]
+}
+
 HISTORY: dict[str, Any] = {"start": "2025-01-01 00:00:00", "end": "2025-01-01 01:00:00"}
 
 
@@ -76,6 +91,13 @@ def test_search_raises_on_atpd_error(mock_api, client, payload):
     mock_api.post(SQL_URL).mock(return_value=httpx.Response(200, json=payload))
 
     with pytest.raises(AspenSqlError, match="Expecting operator"):
+        client.search(description="temp")
+
+
+def test_search_raises_on_original_format_error(mock_api, client):
+    mock_api.post(SQL_URL).mock(return_value=httpx.Response(200, json=ORIGINAL_ERROR))
+
+    with pytest.raises(AspenSqlError, match="Closing quote missing"):
         client.search(description="temp")
 
 
