@@ -122,8 +122,6 @@ INPUTS = {
     "search description": search_description,
     "search tag pattern": search_tag_pattern,
     "aggregates tags": aggregates("tags"),
-    "aggregates start": aggregates("start"),
-    "aggregates end": aggregates("end"),
 }
 
 
@@ -159,6 +157,35 @@ def test_aggregates_xml_breakout_stays_text(name):
 
     assert "<SQL>" not in skeleton
     assert XML_BREAKOUT in literals
+
+
+def history_timestamp(field: str):
+    def build(value: str) -> str:
+        args = {"start": "2025-01-01", "end": "2025-01-02"}
+        args[field] = value
+        return sql_of(
+            SqlHistoryQueryBuilder().build(
+                tags="T1", datasource="IP21", read_type=ReaderType.RAW, **args
+            )
+        )
+
+    return build
+
+
+TIMESTAMP_INPUTS = {
+    "history start": history_timestamp("start"),
+    "history end": history_timestamp("end"),
+    "aggregates start": aggregates("start"),
+    "aggregates end": aggregates("end"),
+}
+
+
+@pytest.mark.parametrize("payload", [*PAYLOADS, XML_BREAKOUT])
+@pytest.mark.parametrize("name", TIMESTAMP_INPUTS.keys())
+def test_timestamp_payload_is_rejected(name, payload):
+    """Timestamps are parsed and re-formatted, so payloads never reach the query."""
+    with pytest.raises(ValueError):
+        TIMESTAMP_INPUTS[name](payload)
 
 
 @pytest.mark.parametrize("payload", PAYLOADS)

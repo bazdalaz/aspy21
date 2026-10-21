@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Response parsers no longer turn unexpected failures into empty results
 - Empty read results are no longer cached, so a transient empty response is not pinned
   for the historical TTL (24h by default)
+- Aggregate reads (AVG, MIN, MAX, RNG) sent `start`/`end` unconverted, which IP.21 rejects
+  for ISO timestamps (`Invalid TIMESTAMP value`). The error was hidden, so these reads
+  silently returned no data. Timestamps are now converted like history reads
+- Timestamps in queries used locale-dependent month names (e.g. `Okt` on a German
+  system), which IP.21 cannot parse. Month names are now always English
 
 ### Added
 - `AspenSqlError` exception (subclass of `ValueError`, so existing handlers keep working)

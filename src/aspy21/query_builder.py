@@ -29,6 +29,25 @@ def sql_literal(value: str) -> str:
     return "'" + str(value).replace("'", "''") + "'"
 
 
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def sql_timestamp(value: str) -> str:
+    """Convert a timestamp to the IP.21 SQL format DD-Mon-YY HH:MM:SS.
+
+    Month names are always English (strftime's %b follows the system locale), and
+    fractional seconds are dropped because IP.21 rejects them.
+
+    Args:
+        value: Timestamp string in any format pandas can parse (e.g. ISO 8601)
+
+    Returns:
+        Timestamp formatted for SQLplus, e.g. 21-Oct-26 13:35:59
+    """
+    dt = pd.to_datetime(value)
+    return f"{dt.day:02d}-{_MONTHS[dt.month - 1]}-{dt:%y %H:%M:%S}"
+
+
 def xml_attr(value: str) -> str:
     """Quote a value as an XML attribute (including surrounding quotes).
 
@@ -104,10 +123,8 @@ class SqlHistoryQueryBuilder(QueryBuilder):
             XML query string for SQL endpoint
         """
         # Convert timestamps to Aspen SQL format (DD-MMM-YY HH:MM:SS)
-        start_dt = pd.to_datetime(start)
-        end_dt = pd.to_datetime(end)
-        start_sql = start_dt.strftime("%d-%b-%y %H:%M:%S")
-        end_sql = end_dt.strftime("%d-%b-%y %H:%M:%S")
+        start_sql = sql_timestamp(start)
+        end_sql = sql_timestamp(end)
 
         # Map ReaderType to Aspen request parameter
         request_map = {
@@ -342,7 +359,8 @@ class SqlAggregatesQueryBuilder(QueryBuilder):
             sql = (
                 f"SELECT {select_clause} FROM aggregates "
                 f"WHERE name = {sql_literal(tag)} "
-                f"AND ts BETWEEN {sql_literal(start)} AND {sql_literal(end)} "
+                f"AND ts BETWEEN {sql_literal(sql_timestamp(start))} "
+                f"AND {sql_literal(sql_timestamp(end))} "
                 f"AND period = {period_tenths}"
             )
             sql_queries.append(sql)
