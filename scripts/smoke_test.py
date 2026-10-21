@@ -16,7 +16,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 import aspy21
-from aspy21 import AspenClient, ReaderType, configure_logging
+from aspy21 import AspenClient, ReaderType, configure_logging, query_builder
+
+# Fail fast if an older aspy21 (e.g. from PyPI) is installed instead of this checkout
+if not hasattr(query_builder, "sql_literal"):
+    print(f"ERROR: aspy21 {aspy21.__version__} at {aspy21.__file__}")
+    print("does not include the escaping fix. Install this checkout with: pip install -e .")
+    exit(1)
 
 # Load .env from project root
 env_path = Path(__file__).parent.parent / ".env"
