@@ -18,13 +18,21 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 import aspy21
-from aspy21 import AspenClient, AspenSqlError, ReaderType, configure_logging, query_builder
+from aspy21 import (
+    AspenClient,
+    AspenSqlError,
+    ReaderType,
+    configure_logging,
+    query_builder,
+    utils,
+)
 from aspy21.errors import raise_for_sql_error
 
 # Fail fast if an older aspy21 (e.g. from PyPI) is installed instead of this checkout
-if not hasattr(query_builder, "sql_literal"):
+if not hasattr(query_builder, "sql_literal") or not hasattr(utils, "server_now"):
     print(f"ERROR: aspy21 {aspy21.__version__} at {aspy21.__file__}")
-    print("does not include the escaping fix. Install this checkout with: pip install -e .")
+    print("does not include the escaping and timezone fixes.")
+    print("Install this checkout with: pip install -e .")
     exit(1)
 
 # Load .env from project root
@@ -42,6 +50,7 @@ datasource = os.getenv("ASPEN_DATASOURCE", "")
 timeout = float(os.getenv("ASPEN_TIMEOUT", "60.0"))
 test_tags = [t.strip() for t in os.getenv("ASPEN_TEST_TAGS", "").split(",") if t.strip()]
 verify_ssl = os.getenv("ASPEN_VERIFY_SSL", "False").lower() == "true"
+server_timezone = os.getenv("ASPEN_SERVER_TIMEZONE") or None
 
 # Validate required variables
 if not all([base_url, username, password, datasource, test_tags]):
@@ -53,6 +62,12 @@ if not all([base_url, username, password, datasource, test_tags]):
     print(f"Looked for .env at: {env_path}")
     exit(1)
 
+try:
+    utils.check_timezone(server_timezone)
+except ValueError as e:
+    print(f"ERROR: {e}. Use an IANA name such as Europe/Berlin, or leave it unset.")
+    exit(1)
+
 # Type narrowing: assert non-None after validation
 assert base_url is not None
 assert username is not None
@@ -62,11 +77,13 @@ print(f"aspy21 {aspy21.__version__} from {aspy21.__file__}")
 print(f"Base URL: {base_url}")
 print(f"Datasource: {datasource}")
 print(f"Tag: {test_tags[0]}")
-print(f"Aggregate tag (last in ASPEN_TEST_TAGS, use a numeric tag): {test_tags[-1]}\n")
+print(f"Aggregate tag (last in ASPEN_TEST_TAGS, use a numeric tag): {test_tags[-1]}")
+print(f"Server timezone (ASPEN_SERVER_TIMEZONE): {server_timezone or 'not set, naive'}\n")
 
 tag = test_tags[0]
 agg_tag = test_tags[-1]
-end = datetime.now() - timedelta(hours=1)
+# Server local time, as IP.21 interprets query timestamps
+end = utils.server_now(server_timezone).to_pydatetime() - timedelta(hours=1)
 start = end - timedelta(hours=1)
 
 
@@ -157,6 +174,7 @@ with AspenClient(
     datasource=datasource,
     timeout=timeout,
     verify_ssl=verify_ssl,
+    server_timezone=server_timezone,
 ) as c:
     timezone_diagnostics(c)
     checks = {
