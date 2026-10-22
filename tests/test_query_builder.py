@@ -1,6 +1,7 @@
 import pytest
 
-from aspy21.query_builder import SqlSnapshotQueryBuilder
+from aspy21.models import ReaderType
+from aspy21.query_builder import SqlHistoryQueryBuilder, SqlSnapshotQueryBuilder
 
 
 def test_build_snapshot_sql_query_multiple_tags():
@@ -177,3 +178,18 @@ def test_timestamp_month_names_do_not_depend_on_locale(loc):
         assert sql_timestamp("2025-05-31 23:59:59.9") == "31-May-25 23:59:59"
     finally:
         locale.setlocale(locale.LC_TIME, old)
+
+
+@pytest.mark.parametrize(
+    ("read_type", "request_value"), [(ReaderType.RAW, "request=4"), (ReaderType.INT, "request=1")]
+)
+def test_history_query_attributes(read_type, request_value):
+    xml = SqlHistoryQueryBuilder().build(["T1"], "2025-01-01", "2025-01-02", "IP21", read_type)
+
+    assert 'to="30"' in xml  # previously "30   "
+    assert request_value in _cdata_sql(xml)
+
+
+def test_history_query_rejects_other_read_types():
+    with pytest.raises(ValueError, match="RAW and INT"):
+        SqlHistoryQueryBuilder().build(["T1"], "2025-01-01", "2025-01-02", "IP21", ReaderType.AVG)

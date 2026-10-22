@@ -4,6 +4,7 @@ IP.21 reports SQL errors with HTTP 200. These must raise instead of being
 treated as "no data" (and then cached as an empty result).
 """
 
+import logging
 from typing import Any
 
 import httpx
@@ -154,3 +155,36 @@ def test_empty_result_is_not_cached(mock_api):
 
     assert route.call_count == 2
     assert len(result) == 1
+
+
+@pytest.mark.parametrize(
+    "read_kwargs",
+    [
+        pytest.param({**HISTORY, "read_type": ReaderType.RAW}, id="history"),
+        pytest.param({}, id="snapshot"),
+        pytest.param({**HISTORY, "read_type": ReaderType.AVG}, id="aggregates"),
+    ],
+)
+def test_non_json_response_raises_sql_error(mock_api, client, read_kwargs, caplog):
+    mock_api.post(SQL_URL).mock(return_value=httpx.Response(200, text="<html>Error</html>"))
+
+    with pytest.raises(AspenSqlError, match="non-JSON response: '<html>Error</html>'"):
+        client.read(["TAG1"], **read_kwargs)
+    # The caller gets the error; it is not also logged as an ERROR
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param({"unexpected": True}, id="no-data"),
+        pytest.param({"data": "text"}, id="data-not-list"),
+        pytest.param({"data": ["text"]}, id="result-set-not-dict"),
+    ],
+)
+def test_malformed_aggregates_response_raises(mock_api, client, body):
+    # Previously returned no data
+    mock_api.post(SQL_URL).mock(return_value=httpx.Response(200, json=body))
+
+    with pytest.raises(AspenSqlError, match="Unexpected aggregates response"):
+        client.read(["TAG1"], **HISTORY, read_type=ReaderType.AVG)

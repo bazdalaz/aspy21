@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Browse response with an unexpected structure, or one that is not JSON, now raises
   `AspenBrowseError`. Previously an unexpected structure returned `[]`, reported as "no
   tags found"
+- A SQL response that is not JSON now raises `AspenSqlError` (previously a `ValueError`,
+  or a `JSONDecodeError` for aggregate reads). An aggregates response with an unexpected
+  structure raises `AspenSqlError` instead of returning no data
+- Errors raised to the caller are no longer also logged at ERROR level (failed searches,
+  non-JSON responses); they are logged at DEBUG
+- Passing `auth`, `timeout` or `verify_ssl` together with `http_client` logs a warning,
+  since they are not applied to a provided client
+- The history query sent `to="30   "` (with trailing spaces); it now sends `to="30"`. The
+  DEBUG log no longer reports an unchanged row limit for single-tag reads
 
 ### Fixed
 - JSON output (the default) dropped every value stored as an integer, so integer-valued

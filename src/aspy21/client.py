@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Cache operations used for read() results (see _determine_cache_operation)
+DEFAULT_TIMEOUT = 30.0  # seconds
+
 _READ_CACHE_OPERATIONS = ("read_historical", "read_aggregates", "read_snapshot")
 
 
@@ -71,7 +73,7 @@ class AspenClient:
         base_url: str,
         *,
         auth: Auth | tuple[str, str] | None = None,
-        timeout: float = 30.0,
+        timeout: float = DEFAULT_TIMEOUT,
         verify_ssl: bool = True,
         datasource: str | None = None,
         http_client: httpx.Client | None = None,
@@ -92,8 +94,8 @@ class AspenClient:
                 search() raise ValueError without it.
             http_client: Optional httpx.Client instance. If None, creates a new client.
                         Useful for dependency injection and testing. When given,
-                        timeout, verify_ssl and auth are not applied; configure them
-                        on the httpx.Client instead.
+                        timeout, verify_ssl and auth are not applied (a warning is
+                        logged if they are passed); configure them on the httpx.Client.
             cache: Cache configuration:
                   - None: No caching (default)
                   - True: Enable caching with default config
@@ -158,6 +160,20 @@ class AspenClient:
             self._client = httpx.Client(timeout=timeout, verify=verify_ssl, auth=auth)
         else:
             self._client = http_client
+            ignored = [
+                name
+                for name, passed in (
+                    ("auth", auth is not None),
+                    ("timeout", timeout != DEFAULT_TIMEOUT),
+                    ("verify_ssl", verify_ssl is not True),
+                )
+                if passed
+            ]
+            if ignored:
+                logger.warning(
+                    f"{', '.join(ignored)} not applied to the provided http_client; "
+                    "set them on the httpx.Client instead"
+                )
 
         # Initialize cache
         if cache is None:
@@ -725,7 +741,7 @@ class AspenClient:
             return results[:max_results]
 
         except Exception as e:
-            logger.error(f"Error in SQL search: {type(e).__name__}: {e}")
+            logger.debug(f"SQL search failed: {type(e).__name__}: {e}")
             raise
 
     @overload
@@ -1024,7 +1040,7 @@ class AspenClient:
                 search_results = results[:limit]
 
             except Exception as e:
-                logger.error(f"Error searching tags: {type(e).__name__}: {e}")
+                logger.debug(f"Browse search failed: {type(e).__name__}: {e}")
                 raise
 
         # Step 2: If no start time, return search results (search-only mode)

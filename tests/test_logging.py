@@ -129,3 +129,53 @@ def test_config_log_for_provided_http_client(caplog):
     assert "Config: provided http_client (timeout=60s), datasource=IP21, retries=0" in (caplog.text)
     assert "verify_ssl" not in caplog.text
     assert "timeout=12" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "ignored"),
+    [
+        ({"auth": ("user", "pass")}, "auth"),
+        ({"timeout": 12}, "timeout"),
+        ({"verify_ssl": False}, "verify_ssl"),
+        ({"auth": ("u", "p"), "timeout": 5, "verify_ssl": False}, "auth, timeout, verify_ssl"),
+    ],
+)
+def test_warning_for_arguments_ignored_with_http_client(caplog, kwargs, ignored):
+    with httpx.Client() as http, caplog.at_level(logging.WARNING, logger="aspy21.client"):
+        AspenClient(BASE_URL, datasource="IP21", http_client=http, **kwargs)
+
+    assert f"{ignored} not applied to the provided http_client" in caplog.text
+
+
+def test_no_warning_for_http_client_alone(caplog):
+    with httpx.Client() as http, caplog.at_level(logging.WARNING, logger="aspy21.client"):
+        AspenClient(BASE_URL, datasource="IP21", http_client=http)
+
+    assert "not applied" not in caplog.text
+
+
+@respx.mock
+@pytest.mark.parametrize(("tags", "logged"), [(["A"], False), (["A", "B"], True)])
+def test_row_limit_logged_only_when_changed(caplog, tags, logged):
+    # Previously logged "Adjusted max_rows from 100000 to 100000" for one tag
+    respx.post(f"{BASE_URL}/SQL").mock(return_value=httpx.Response(200, json=[]))
+    with AspenClient(BASE_URL, datasource="IP21") as client, caplog.at_level(logging.DEBUG):
+        client.read(tags, start="2025-01-01 00:00:00", end="2025-01-01 01:00:00", limit=10)
+
+    assert ("Row limit for 2 tags: 20 (10 per tag)" in caplog.text) is logged
+
+
+@respx.mock
+@pytest.mark.parametrize("description", [None, "pump"], ids=["browse", "sql"])
+def test_failed_search_not_logged_as_error(caplog, description):
+    """The caller gets the exception; it is not also logged as an ERROR."""
+    respx.get(f"{BASE_URL}/Browse").mock(return_value=httpx.Response(503))
+    respx.post(f"{BASE_URL}/SQL").mock(return_value=httpx.Response(503))
+    with (
+        AspenClient(BASE_URL, datasource="IP21", retries=0) as client,
+        caplog.at_level(logging.DEBUG),
+        pytest.raises(httpx.HTTPStatusError),
+    ):
+        client.search("T*", description=description)
+
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
