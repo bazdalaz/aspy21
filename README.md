@@ -15,7 +15,7 @@
 
 ## Overview
 
-**aspy21** is a modern, high-performance Python client for Aspen InfoPlus.21 (IP.21) built on the AspenOne ProcessData REST API. It provides unified access to process historian data with pandas DataFrame output, automatic batching, and intelligent retry logic.
+**aspy21** is a modern, high-performance Python client for Aspen InfoPlus.21 (IP.21) built on the AspenOne ProcessData REST API. It provides unified access to process historian data with pandas DataFrame output, automatic batching, and optional caching.
 
 ### Key Capabilities
 
@@ -29,7 +29,6 @@
 - Pandas DataFrame or JSON output with optional status and description fields
 - Enum-based parameters for cleaner, type-safe API
 - Configurable row limits and query parameters
-- Built-in retry logic with exponential backoff
 - Type-annotated and fully tested (88% coverage)
 
 ### Use Cases
@@ -810,14 +809,6 @@ with AspenClient(
 
 Aggregate values (AVG, MIN, MAX, RNG) are stamped at the end of their period.
 
-### Retry Behavior
-
-The client automatically retries failed requests with exponential backoff:
-
-- Maximum attempts: 3
-- Initial delay: 0.5 seconds
-- Maximum delay: 8 seconds
-
 ---
 
 ## Error Handling
@@ -883,7 +874,7 @@ ruff format
 
 - **httpx** (>= 0.27) - HTTP client with async support
 - **pandas** (>= 2.0) - DataFrame output and date parsing
-- **tenacity** (>= 9.0) - Retry logic with exponential backoff
+- **tenacity** (>= 9.0)
 
 ### Development Dependencies
 

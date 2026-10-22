@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-10-22
+
+**Time zone release** - Timestamps are now consistent across read types and match the
+server's clock.
+
+### Changed
+- Returned timestamps are naive server-local times by default; history and aggregate
+  timestamps no longer carry a `+00:00` offset, and snapshot timestamps are no longer UTC.
+  Pass `server_timezone` to get timezone-aware timestamps
+
 ### Fixed
 - Timestamps from history and aggregate reads were labelled UTC (`+00:00`) although IP.21
   returns server local time, while snapshot reads used the client's UTC clock. All reads
@@ -16,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `server_timezone` option on `AspenClient` (e.g. `"Europe/Berlin"`): returned timestamps
   are timezone-aware in that zone, and timezone-aware `start`/`end` values are converted
   to it. Use `server_timezone="UTC"` for a server that returns real UTC times
+
+### Documentation
+- Removed claims of automatic request retries, which were never implemented
+- Documented `AspenSqlError` handling and that aggregates are stamped at period end
 
 ## [0.0.6] - 2026-10-22
 
@@ -198,7 +212,8 @@ pip install aspy21
 
 This is the first stable release. The API is considered stable and follows semantic versioning. Breaking changes will only occur in major version updates (e.g., 1.0.0).
 
-[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.6...HEAD
+[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.7...HEAD
+[0.0.7]: https://github.com/bazdalaz/aspy21/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/bazdalaz/aspy21/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/bazdalaz/aspy21/compare/v0.0.2...v0.0.5
 [0.0.2]: https://github.com/bazdalaz/aspy21/compare/v0.0.1...v0.0.2
