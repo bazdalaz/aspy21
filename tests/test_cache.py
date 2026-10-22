@@ -286,3 +286,38 @@ class TestAspenCache:
 
         # Wait and verify snapshot expires first (50s), but we'll use shorter times for test
         # This is more of a design verification - actual TTL testing needs longer waits
+
+
+class TestCacheCopies:
+    """Cached values are isolated from the objects passed in and handed out."""
+
+    def test_get_returns_copy_of_dataframe(self):
+        cache = AspenCache()
+        cache.set("test", pd.DataFrame({"a": [1, 2]}), key=1)
+        first = cache.get("test", key=1)
+        assert isinstance(first, pd.DataFrame)
+        first.loc[0, "a"] = 99
+        pd.testing.assert_frame_equal(cache.get("test", key=1), pd.DataFrame({"a": [1, 2]}))
+
+    def test_set_stores_copy_of_dataframe(self):
+        cache = AspenCache()
+        df = pd.DataFrame({"a": [1, 2]})
+        cache.set("test", df, key=1)
+        df.loc[0, "a"] = 99
+        pd.testing.assert_frame_equal(cache.get("test", key=1), pd.DataFrame({"a": [1, 2]}))
+
+    def test_get_returns_deep_copy_of_records(self):
+        cache = AspenCache()
+        cache.set("test", [{"value": 1}], key=1)
+        first = cache.get("test", key=1)
+        assert isinstance(first, list)
+        first[0]["value"] = 99
+        first.append({"value": 2})
+        assert cache.get("test", key=1) == [{"value": 1}]
+
+    def test_set_stores_deep_copy_of_records(self):
+        cache = AspenCache()
+        records = [{"value": 1}]
+        cache.set("test", records, key=1)
+        records[0]["value"] = 99
+        assert cache.get("test", key=1) == [{"value": 1}]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import logging
@@ -13,6 +14,17 @@ from typing import Any
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+
+def _copy_value(value: Any) -> Any:
+    """Return an independent copy of a cached value.
+
+    Results are copied on the way in and out so that callers modifying a returned
+    DataFrame or list cannot change what later cache hits return.
+    """
+    if isinstance(value, pd.DataFrame):
+        return value.copy(deep=True)
+    return copy.deepcopy(value)
 
 
 @dataclass
@@ -161,7 +173,7 @@ class AspenCache:
 
             self._hits += 1
             logger.debug(f"Cache hit: {operation} (key={key}, {entry})")
-            return entry.value
+            return _copy_value(entry.value)
 
     def set(
         self, operation: str, value: Any, ttl_seconds: int | None = None, **params: Any
@@ -193,7 +205,7 @@ class AspenCache:
         with self._lock:
             self._cleanup_expired()
             self._evict_if_needed()
-            entry = CacheEntry(value, ttl_seconds)
+            entry = CacheEntry(_copy_value(value), ttl_seconds)
             self._cache[key] = entry
             logger.debug(f"Cache set: {operation} (key={key}, ttl={ttl_seconds}s)")
 

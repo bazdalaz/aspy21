@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Cached `read()` results were returned for requests that should give a different result:
+  a cached JSON result was served for a DataFrame request (and the reverse), results
+  ignored `limit` and tag order, and clients sharing an `AspenCache` served each other's
+  data across servers, datasources and `server_timezone` settings. Cache keys now include
+  every argument and client setting that affects the result
+- Search results cached through a shared `AspenCache` are no longer shared between
+  clients on different servers or datasources
+- Modifying a DataFrame or list returned by `read()` or `search()` changed what later
+  cache hits returned. The cache now stores and returns copies
+
 ## [0.0.7] - 2026-10-22
 
 **Time zone release** - Timestamps are now consistent across read types and match the

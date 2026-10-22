@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import TYPE_CHECKING
@@ -241,6 +242,47 @@ class AspenClient:
 
         return "read_historical"
 
+    def _client_cache_identity(self) -> dict[str, str]:
+        """Return the server and datasource that cached results come from.
+
+        A cache can be shared across clients, so keys must tell servers and
+        datasources apart.
+        """
+        return {"base_url": self.base_url, "datasource": self.datasource}
+
+    def _read_cache_key_params(
+        self,
+        *,
+        tags: list[str],
+        start: str | None,
+        end: str | None,
+        interval: int | None,
+        read_type: ReaderType,
+        include_status: bool,
+        with_description: bool,
+        limit: int,
+        as_df: bool,
+    ) -> dict:
+        """Build the cache key parameters for a read() call.
+
+        Every argument that changes the returned result must be part of the key.
+        """
+        return {
+            # Serialized so tag order (which sets column order) is part of the key
+            "tags": json.dumps(tags),
+            "start": start,
+            "end": end,
+            "interval": interval,
+            "read_type": read_type.value,
+            "include_status": include_status,
+            "with_description": with_description,
+            "limit": limit,
+            "as_df": as_df,
+            # Read results are localized to the server time zone
+            "server_timezone": str(self.server_timezone) if self.server_timezone else None,
+            **self._client_cache_identity(),
+        }
+
     def get_cache_stats(self) -> dict | None:
         """Get cache statistics.
 
@@ -390,15 +432,17 @@ class AspenClient:
         # Check cache before making API call (only for historical data)
         if self._cache and self._is_historical_data(end):
             cache_operation = self._determine_cache_operation(effective_read_type, start, end)
-            cache_key_params = {
-                "tags": tags,
-                "start": start,
-                "end": end,
-                "interval": interval,
-                "read_type": effective_read_type.value,
-                "include_status": include_status,
-                "with_description": with_description,
-            }
+            cache_key_params = self._read_cache_key_params(
+                tags=tags,
+                start=start,
+                end=end,
+                interval=interval,
+                read_type=effective_read_type,
+                include_status=include_status,
+                with_description=with_description,
+                limit=limit,
+                as_df=as_df,
+            )
             cached_result = self._cache.get(cache_operation, **cache_key_params)
             if cached_result is not None:
                 logger.debug(f"Cache hit for {cache_operation}")
@@ -445,15 +489,17 @@ class AspenClient:
         # Empty results are not cached: they may be transient (e.g. data not yet archived).
         if self._cache and self._is_historical_data(end) and len(result) > 0:
             cache_operation = self._determine_cache_operation(effective_read_type, start, end)
-            cache_key_params = {
-                "tags": tags,
-                "start": start,
-                "end": end,
-                "interval": interval,
-                "read_type": effective_read_type.value,
-                "include_status": include_status,
-                "with_description": with_description,
-            }
+            cache_key_params = self._read_cache_key_params(
+                tags=tags,
+                start=start,
+                end=end,
+                interval=interval,
+                read_type=effective_read_type,
+                include_status=include_status,
+                with_description=with_description,
+                limit=limit,
+                as_df=as_df,
+            )
             self._cache.set(cache_operation, result, **cache_key_params)
             logger.debug(f"Cached result for {cache_operation}")
 
@@ -684,6 +730,7 @@ class AspenClient:
                 "need_descriptions": need_descriptions,
                 "case_sensitive": case_sensitive,
                 "limit": limit,
+                **self._client_cache_identity(),
             }
             cached_result = self._cache.get("search", **cache_key_params)
             if cached_result is not None:
@@ -785,6 +832,7 @@ class AspenClient:
                     "need_descriptions": need_descriptions,
                     "case_sensitive": case_sensitive,
                     "limit": limit,
+                    **self._client_cache_identity(),
                 }
                 self._cache.set("search", search_results, **cache_key_params)
                 logger.debug("Cached search results")
