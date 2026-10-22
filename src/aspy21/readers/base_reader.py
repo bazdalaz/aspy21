@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 import pandas as pd
 
 if TYPE_CHECKING:
+    from datetime import tzinfo
+
     import httpx
 
     from ..models import ReaderType
@@ -25,6 +27,7 @@ class BaseReader(ABC):
         base_url: str,
         datasource: str,
         http_client: httpx.Client,
+        server_timezone: str | tzinfo | None = None,
     ) -> None:
         """Initialize the reader.
 
@@ -32,10 +35,12 @@ class BaseReader(ABC):
             base_url: Base URL of the Aspen ProcessData REST API
             datasource: Aspen datasource name
             http_client: HTTP client instance for making requests
+            server_timezone: Time zone of the IP.21 server, or None for this machine's zone
         """
         self.base_url = base_url
         self.datasource = datasource
         self.http_client = http_client
+        self.server_timezone = server_timezone
 
     @abstractmethod
     def read(

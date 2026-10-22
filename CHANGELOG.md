@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Timestamps from history and aggregate reads were labelled UTC (`+00:00`) although IP.21
+  returns server local time, while snapshot reads used the client's UTC clock. All reads
+  now return server local time, naive by default
+
+### Added
+- `server_timezone` option on `AspenClient` (e.g. `"Europe/Berlin"`): returned timestamps
+  are timezone-aware in that zone, and timezone-aware `start`/`end` values are converted
+  to it. Use `server_timezone="UTC"` for a server that returns real UTC times
+
 ## [0.0.6] - 2026-10-22
 
 **Error handling release** - SQL errors are now raised instead of being returned as empty

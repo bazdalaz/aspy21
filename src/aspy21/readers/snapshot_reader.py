@@ -9,10 +9,13 @@ import pandas as pd
 
 from ..errors import raise_for_sql_error
 from ..query_builder import SqlSnapshotQueryBuilder
+from ..utils import server_now
 from .base_reader import BaseReader
 from .response_parser import SqlSnapshotResponseParser
 
 if TYPE_CHECKING:
+    from datetime import tzinfo
+
     import httpx
 
     from ..models import ReaderType
@@ -23,15 +26,22 @@ logger = logging.getLogger(__name__)
 class SnapshotReader(BaseReader):
     """Reader for snapshot (current value) reads using SQL endpoint."""
 
-    def __init__(self, base_url: str, datasource: str, http_client: httpx.Client):
+    def __init__(
+        self,
+        base_url: str,
+        datasource: str,
+        http_client: httpx.Client,
+        server_timezone: str | tzinfo | None = None,
+    ):
         """Initialize snapshot reader with response parser.
 
         Args:
             base_url: Base URL for the API
             datasource: Datasource name
             http_client: HTTP client for making requests
+            server_timezone: Time zone of the IP.21 server, or None for this machine's zone
         """
-        super().__init__(base_url, datasource, http_client)
+        super().__init__(base_url, datasource, http_client, server_timezone)
         self.parser = SqlSnapshotResponseParser()
 
     def can_handle(
@@ -81,12 +91,8 @@ class SnapshotReader(BaseReader):
         )
         response.raise_for_status()
 
-        snapshot_time = pd.Timestamp.utcnow()
-        if snapshot_time.tzinfo is None:
-            snapshot_time = snapshot_time.tz_localize("UTC")
-        else:
-            snapshot_time = snapshot_time.tz_convert("UTC")
-        snapshot_time = snapshot_time.tz_convert(None)
+        # Server local time, matching the timestamps of history reads
+        snapshot_time = server_now(self.server_timezone)
 
         # IP.21 returns an empty body when none of the requested tags exist
         if not response.text or response.headers.get("content-length") == "0":

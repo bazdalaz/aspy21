@@ -136,7 +136,7 @@ def test_error_is_not_cached(mock_api):
         result = c.read(["T1"], **HISTORY, read_type=ReaderType.RAW)
 
     assert route.call_count == 2
-    assert result == [{"timestamp": "2025-01-01T00:00:00+00:00", "tag": "T1", "value": 1.0}]
+    assert result == [{"timestamp": "2025-01-01T00:00:00", "tag": "T1", "value": 1.0}]
 
 
 def test_empty_result_is_not_cached(mock_api):

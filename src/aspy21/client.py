@@ -13,8 +13,11 @@ from .cache import AspenCache, CacheConfig
 from .errors import raise_for_sql_error
 from .models import IncludeFields, OutputFormat, ReaderType
 from .query_builder import SqlSearchQueryBuilder
+from .utils import check_timezone, localize_server_index, server_now, to_server_time
 
 if TYPE_CHECKING:
+    from datetime import tzinfo
+
     from httpx import Auth
 
 logger = logging.getLogger(__name__)
@@ -64,6 +67,7 @@ class AspenClient:
         datasource: str | None = None,
         http_client: httpx.Client | None = None,
         cache: AspenCache | CacheConfig | bool | None = None,
+        server_timezone: str | tzinfo | None = None,
     ) -> None:
         """Initialize the Aspen client.
 
@@ -81,6 +85,12 @@ class AspenClient:
                   - True: Enable caching with default config
                   - CacheConfig: Enable caching with custom config
                   - AspenCache: Use existing cache instance
+            server_timezone: Time zone of the IP.21 server, e.g. "Europe/Berlin".
+                IP.21 reads and returns timestamps in the server's local time.
+                - None: Return naive server-local timestamps (default). Timezone-aware
+                  start/end values are converted to this machine's local zone.
+                - Zone name or tzinfo: Return timestamps in that zone, and convert
+                  timezone-aware start/end values to it.
 
         Example:
             Using context manager with authentication:
@@ -114,6 +124,8 @@ class AspenClient:
         self.verify_ssl = verify_ssl
         self.datasource = datasource or ""  # Empty string = use server default
         self.auth = auth
+        check_timezone(server_timezone)
+        self.server_timezone = server_timezone
 
         # Support dependency injection of HTTP client
         self._owns_client = http_client is None
@@ -144,11 +156,11 @@ class AspenClient:
         )
 
         self._readers = [
-            SnapshotReader(self.base_url, self.datasource, self._client),
+            SnapshotReader(self.base_url, self.datasource, self._client, server_timezone),
             AggregatesReader(
-                self.base_url, self.datasource, self._client
+                self.base_url, self.datasource, self._client, server_timezone
             ),  # Check aggregates before history
-            SqlHistoryReader(self.base_url, self.datasource, self._client),
+            SqlHistoryReader(self.base_url, self.datasource, self._client, server_timezone),
         ]
 
         logger.info(f"Initialized AspenClient for {self.base_url}")
@@ -201,9 +213,9 @@ class AspenClient:
             return False
 
         try:
-            end_dt = pd.to_datetime(end)
+            end_dt = to_server_time(end, self.server_timezone)
             # Add 1 minute buffer to account for clock skew
-            return end_dt < (pd.Timestamp.now() - pd.Timedelta(minutes=1))
+            return end_dt < (server_now(self.server_timezone) - pd.Timedelta(minutes=1))
         except Exception:
             # If we can't parse, assume not historical to be safe
             return False
@@ -361,10 +373,14 @@ class AspenClient:
             effective_read_type = ReaderType.SNAPSHOT
         elif start is not None and end is None:
             # If start provided but end omitted, use current time
-            from datetime import datetime
-
-            end = datetime.now().isoformat()
+            end = server_now(self.server_timezone).isoformat()
             logger.debug(f"End time not provided, using current time: {end}")
+
+        # IP.21 interprets query times as server local time
+        if start is not None:
+            start = to_server_time(start, self.server_timezone).isoformat()
+        if end is not None:
+            end = to_server_time(end, self.server_timezone).isoformat()
 
         logger.debug(f"Tags: {tags}")
         logger.debug(f"Reader type: {effective_read_type.value}, Interval: {interval}")
@@ -409,6 +425,8 @@ class AspenClient:
                 break
         else:
             raise ValueError(f"No reader available for read_type={effective_read_type}")
+
+        frames = [localize_server_index(frame, self.server_timezone) for frame in frames]
 
         # Format output using formatter
         result = DataFormatter.format_output(

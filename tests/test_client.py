@@ -139,7 +139,7 @@ def test_snapshot_read_uses_sql(mock_api, monkeypatch):
     )
 
     frozen_time = pd.Timestamp("2025-06-20 09:00:00")
-    monkeypatch.setattr(pd.Timestamp, "utcnow", staticmethod(lambda: frozen_time))
+    monkeypatch.setattr("aspy21.readers.snapshot_reader.server_now", lambda tz: frozen_time)
 
     c = AspenClient(
         base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
@@ -189,7 +189,7 @@ def test_read_without_range_defaults_to_snapshot(mock_api, monkeypatch):
     )
 
     frozen_time = pd.Timestamp("2025-06-20 10:15:30")
-    monkeypatch.setattr(pd.Timestamp, "utcnow", staticmethod(lambda: frozen_time))
+    monkeypatch.setattr("aspy21.readers.snapshot_reader.server_now", lambda tz: frozen_time)
 
     c = AspenClient(
         base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
@@ -226,7 +226,7 @@ def test_read_without_range_snapshot_disallows_status(mock_api, monkeypatch):
     )
 
     frozen_time = pd.Timestamp("2025-06-20 11:00:00")
-    monkeypatch.setattr(pd.Timestamp, "utcnow", staticmethod(lambda: frozen_time))
+    monkeypatch.setattr("aspy21.readers.snapshot_reader.server_now", lambda tz: frozen_time)
 
     c = AspenClient(
         base_url="https://aspen.local/ProcessData/AtProcessDataREST.dll",
@@ -310,7 +310,8 @@ def test_sql_multi_tag_read_dataframe(mock_api):
         "TAG2_description",
         "TAG2_status",
     ]
-    ts = pd.Timestamp("2025-06-20T08:00:00Z")
+    # Server-local wall-clock time; the "Z" from the server is not a real UTC marker
+    ts = pd.Timestamp("2025-06-20T08:00:00")
     assert df.loc[ts, "TAG1"] == 1.2
     assert df.loc[ts, "TAG2"] == 5.5
     assert df.loc[ts, "TAG1_status"] == 0

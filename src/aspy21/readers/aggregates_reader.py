@@ -13,6 +13,8 @@ from .base_reader import BaseReader
 from .response_parser import SqlAggregatesResponseParser
 
 if TYPE_CHECKING:
+    from datetime import tzinfo
+
     import httpx
 
     from ..models import ReaderType
@@ -23,15 +25,22 @@ logger = logging.getLogger(__name__)
 class AggregatesReader(BaseReader):
     """Reader for aggregate statistics using SQL aggregates table."""
 
-    def __init__(self, base_url: str, datasource: str, http_client: httpx.Client):
+    def __init__(
+        self,
+        base_url: str,
+        datasource: str,
+        http_client: httpx.Client,
+        server_timezone: str | tzinfo | None = None,
+    ):
         """Initialize aggregates reader with response parser.
 
         Args:
             base_url: Base URL for the API
             datasource: Datasource name
             http_client: HTTP client for making requests
+            server_timezone: Time zone of the IP.21 server, or None for this machine's zone
         """
-        super().__init__(base_url, datasource, http_client)
+        super().__init__(base_url, datasource, http_client, server_timezone)
         self.parser = SqlAggregatesResponseParser()
 
     def can_handle(

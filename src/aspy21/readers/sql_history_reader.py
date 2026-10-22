@@ -13,6 +13,8 @@ from .base_reader import BaseReader
 from .response_parser import SqlHistoryResponseParser
 
 if TYPE_CHECKING:
+    from datetime import tzinfo
+
     import httpx
 
     from ..models import ReaderType
@@ -23,15 +25,22 @@ logger = logging.getLogger(__name__)
 class SqlHistoryReader(BaseReader):
     """Reader for historical data using SQL endpoint (batches multiple tags)."""
 
-    def __init__(self, base_url: str, datasource: str, http_client: httpx.Client):
+    def __init__(
+        self,
+        base_url: str,
+        datasource: str,
+        http_client: httpx.Client,
+        server_timezone: str | tzinfo | None = None,
+    ):
         """Initialize SQL history reader with response parser.
 
         Args:
             base_url: Base URL for the API
             datasource: Datasource name
             http_client: HTTP client for making requests
+            server_timezone: Time zone of the IP.21 server, or None for this machine's zone
         """
-        super().__init__(base_url, datasource, http_client)
+        super().__init__(base_url, datasource, http_client, server_timezone)
         self.parser = SqlHistoryResponseParser()
 
     def can_handle(
