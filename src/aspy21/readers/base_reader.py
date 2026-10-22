@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from ..retry import send
+
 if TYPE_CHECKING:
     from datetime import tzinfo
 
@@ -28,6 +30,8 @@ class BaseReader(ABC):
         datasource: str,
         http_client: httpx.Client,
         server_timezone: str | tzinfo | None = None,
+        *,
+        retries: int = 0,
     ) -> None:
         """Initialize the reader.
 
@@ -36,11 +40,31 @@ class BaseReader(ABC):
             datasource: Aspen datasource name
             http_client: HTTP client instance for making requests
             server_timezone: Time zone of the IP.21 server, or None for this machine's zone
+            retries: How many times to repeat a request that failed transiently
         """
         self.base_url = base_url
         self.datasource = datasource
         self.http_client = http_client
         self.server_timezone = server_timezone
+        self.retries = retries
+
+    def _post_sql(self, xml_query: str) -> httpx.Response:
+        """POST a query to the SQL endpoint, retrying transient failures.
+
+        Args:
+            xml_query: XML request body
+
+        Returns:
+            Successful response
+        """
+        return send(
+            self.http_client,
+            "POST",
+            f"{self.base_url}/SQL",
+            retries=self.retries,
+            content=xml_query,
+            headers={"Content-Type": "text/xml"},
+        )
 
     @abstractmethod
     def read(

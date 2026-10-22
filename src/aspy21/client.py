@@ -14,6 +14,7 @@ from .cache import AspenCache, CacheConfig
 from .errors import raise_for_sql_error
 from .models import IncludeFields, OutputFormat, ReaderType
 from .query_builder import SqlSearchQueryBuilder
+from .retry import send
 from .utils import check_timezone, localize_server_index, server_now, to_server_time
 
 if TYPE_CHECKING:
@@ -73,6 +74,7 @@ class AspenClient:
         http_client: httpx.Client | None = None,
         cache: AspenCache | CacheConfig | bool | None = None,
         server_timezone: str | tzinfo | None = None,
+        retries: int = 2,
     ) -> None:
         """Initialize the Aspen client.
 
@@ -96,6 +98,11 @@ class AspenClient:
                   start/end values are converted to this machine's local zone.
                 - Zone name or tzinfo: Return timestamps in that zone, and convert
                   timezone-aware start/end values to it.
+            retries: How many times to repeat a request after a transient failure
+                (default: 2, so up to 3 attempts; 0 disables retries). Connection errors,
+                connect timeouts and HTTP 429/502/503/504 are retried with exponential
+                backoff (0.5s, 1s, ... up to 8s) or the server's Retry-After. Read
+                timeouts, other HTTP errors and SQL errors are not retried.
 
         Example:
             Using context manager with authentication:
@@ -131,6 +138,9 @@ class AspenClient:
         self.auth = auth
         check_timezone(server_timezone)
         self.server_timezone = server_timezone
+        if isinstance(retries, bool) or not isinstance(retries, int) or retries < 0:
+            raise ValueError(f"retries must be a non-negative integer, got {retries!r}")
+        self.retries = retries
 
         # Support dependency injection of HTTP client
         self._owns_client = http_client is None
@@ -160,12 +170,11 @@ class AspenClient:
             SqlHistoryReader,
         )
 
+        reader_args = (self.base_url, self.datasource, self._client, server_timezone)
         self._readers = [
-            SnapshotReader(self.base_url, self.datasource, self._client, server_timezone),
-            AggregatesReader(
-                self.base_url, self.datasource, self._client, server_timezone
-            ),  # Check aggregates before history
-            SqlHistoryReader(self.base_url, self.datasource, self._client, server_timezone),
+            SnapshotReader(*reader_args, retries=retries),
+            AggregatesReader(*reader_args, retries=retries),  # Check aggregates before history
+            SqlHistoryReader(*reader_args, retries=retries),
         ]
 
         logger.info(f"Initialized AspenClient for {self.base_url}")
@@ -576,10 +585,15 @@ class AspenClient:
         logger.info(f"SQL request: POST {sql_url}")
 
         try:
-            response = self._client.post(sql_url, content=xml, headers={"Content-Type": "text/xml"})
-
+            response = send(
+                self._client,
+                "POST",
+                sql_url,
+                retries=self.retries,
+                content=xml,
+                headers={"Content-Type": "text/xml"},
+            )
             logger.debug(f"Response status: {response.status_code}")
-            response.raise_for_status()
 
             data = response.json()
             raise_for_sql_error(data)
@@ -792,10 +806,9 @@ class AspenClient:
             logger.debug(f"Query params: {params}")
 
             try:
-                response = self._client.get(browse_url)
+                response = send(self._client, "GET", browse_url, retries=self.retries)
                 logger.debug(f"Response status: {response.status_code}")
 
-                response.raise_for_status()
                 data = response.json()
 
                 # Check for API error response

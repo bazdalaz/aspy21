@@ -31,6 +31,8 @@ class AggregatesReader(BaseReader):
         datasource: str,
         http_client: httpx.Client,
         server_timezone: str | tzinfo | None = None,
+        *,
+        retries: int = 0,
     ):
         """Initialize aggregates reader with response parser.
 
@@ -39,8 +41,9 @@ class AggregatesReader(BaseReader):
             datasource: Datasource name
             http_client: HTTP client for making requests
             server_timezone: Time zone of the IP.21 server, or None for this machine's zone
+            retries: How many times to repeat a request that failed transiently
         """
-        super().__init__(base_url, datasource, http_client, server_timezone)
+        super().__init__(base_url, datasource, http_client, server_timezone, retries=retries)
         self.parser = SqlAggregatesResponseParser()
 
     def can_handle(
@@ -114,10 +117,7 @@ class AggregatesReader(BaseReader):
         logger.debug(f"SQL query XML: {xml_query}")
 
         try:
-            response = self.http_client.post(
-                sql_url, content=xml_query, headers={"Content-Type": "text/xml"}
-            )
-            response.raise_for_status()
+            response = self._post_sql(xml_query)
 
             logger.debug(f"Response status: {response.status_code}")
             logger.debug(f"Response headers: {dict(response.headers)}")
