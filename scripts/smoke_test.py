@@ -12,6 +12,7 @@ Usage:
 
 import json
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -33,7 +34,7 @@ if not hasattr(query_builder, "sql_literal") or not hasattr(utils, "server_now")
     print(f"ERROR: aspy21 {aspy21.__version__} at {aspy21.__file__}")
     print("does not include the escaping and timezone fixes.")
     print("Install this checkout with: pip install -e .")
-    exit(1)
+    sys.exit(1)
 
 # Load .env from project root
 env_path = Path(__file__).parent.parent / ".env"
@@ -60,13 +61,13 @@ if not all([base_url, username, password, datasource, test_tags]):
         "ASPEN_DATASOURCE, ASPEN_TEST_TAGS"
     )
     print(f"Looked for .env at: {env_path}")
-    exit(1)
+    sys.exit(1)
 
 try:
     utils.check_timezone(server_timezone)
 except ValueError as e:
     print(f"ERROR: {e}. Use an IANA name such as Europe/Berlin, or leave it unset.")
-    exit(1)
+    sys.exit(1)
 
 # Type narrowing: assert non-None after validation
 assert base_url is not None

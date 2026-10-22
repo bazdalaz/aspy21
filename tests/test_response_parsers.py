@@ -52,7 +52,7 @@ class TestSqlSnapshotResponseParser:
     def test_record_missing_name_field(self):
         """Test when a record has no 'name' field."""
         parser = SqlSnapshotResponseParser()
-        df, descriptions = parser.parse(
+        df, _descriptions = parser.parse(
             response=[
                 {"name->ip_input_value": 10.5},  # Missing 'name'
                 {"name": "TAG1", "name->ip_input_value": 20.0},
@@ -68,7 +68,7 @@ class TestSqlSnapshotResponseParser:
     def test_record_name_not_in_requested_tags(self):
         """Test when response contains tags not in tag_names list."""
         parser = SqlSnapshotResponseParser()
-        df, descriptions = parser.parse(
+        df, _descriptions = parser.parse(
             response=[
                 {"name": "TAG1", "name->ip_input_value": 10.0},
                 {"name": "TAG2", "name->ip_input_value": 20.0},
@@ -126,7 +126,7 @@ class TestSqlHistoryResponseParser:
         """Test when requesting multiple tags but response only contains some."""
         parser = SqlHistoryResponseParser()
         # Response only has TAG1 and TAG2, but we requested TAG1, TAG2, TAG3
-        frames, descriptions = parser.parse(
+        frames, _descriptions = parser.parse(
             response=[
                 {"ts": "2025-01-01T00:00:00Z", "name": "TAG1", "value": 10.0},
                 {"ts": "2025-01-01T00:00:00Z", "name": "TAG2", "value": 20.0},
@@ -206,7 +206,7 @@ class TestSqlAggregatesResponseParser:
     def test_no_rows_in_result_set(self):
         """Test when result set has no rows."""
         parser = SqlAggregatesResponseParser()
-        frames, descriptions = parser.parse(
+        frames, _descriptions = parser.parse(
             response={
                 "data": [
                     {
@@ -228,7 +228,7 @@ class TestSqlAggregatesResponseParser:
     def test_missing_cols_field(self):
         """Test when result set has no 'cols' field."""
         parser = SqlAggregatesResponseParser()
-        frames, descriptions = parser.parse(
+        frames, _descriptions = parser.parse(
             response={"data": [{"rows": [{"fld": ["2025-01-01T00:00:00Z", "TAG1", 10.5]}]}]},
             tag_names=["TAG1"],
             value_column="AVG",
@@ -264,7 +264,7 @@ class TestSqlAggregatesResponseParser:
     def test_row_missing_fld_field(self):
         """Test when row record is missing 'fld' field."""
         parser = SqlAggregatesResponseParser()
-        frames, descriptions = parser.parse(
+        frames, _descriptions = parser.parse(
             response={
                 "data": [
                     {
@@ -369,7 +369,7 @@ class TestSqlAggregatesResponseParser:
         """Test tag name extraction from different field names."""
         parser = SqlAggregatesResponseParser()
         # Some responses use 'NAME', others use 'IP_TAG_NAME'
-        frames, descriptions = parser.parse(
+        frames, _descriptions = parser.parse(
             response={
                 "data": [
                     {

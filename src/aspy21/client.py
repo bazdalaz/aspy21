@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from datetime import tzinfo
 
     from httpx import Auth
+    from typing_extensions import Self
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +175,7 @@ class AspenClient:
         if self._cache:
             logger.info(f"Cache enabled: {self._cache.get_stats()}")
 
-    def __enter__(self) -> AspenClient:
+    def __enter__(self) -> Self:
         """Enter context manager.
 
         Returns:
@@ -220,7 +221,7 @@ class AspenClient:
             end_dt = to_server_time(end, self.server_timezone)
             # Add 1 minute buffer to account for clock skew
             return end_dt < (server_now(self.server_timezone) - pd.Timedelta(minutes=1))
-        except Exception:
+        except (ValueError, TypeError):
             # If we can't parse, assume not historical to be safe
             return False
 

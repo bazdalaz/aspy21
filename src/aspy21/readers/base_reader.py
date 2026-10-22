@@ -69,7 +69,6 @@ class BaseReader(ABC):
         Returns:
             Tuple of (list of DataFrames, dict of tag descriptions)
         """
-        pass
 
     @abstractmethod
     def can_handle(
@@ -88,4 +87,3 @@ class BaseReader(ABC):
         Returns:
             True if this reader can handle the request
         """
-        pass

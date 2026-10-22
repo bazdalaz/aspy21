@@ -1,6 +1,7 @@
 """Example demonstrating caching functionality to reduce API load and improve performance."""
 
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -30,7 +31,7 @@ if not all([base_url, username, password, datasource]):
     print("ERROR: Missing required environment variables!")
     print("Required: ASPEN_BASE_URL, ASPEN_USERNAME, ASPEN_PASSWORD, ASPEN_DATASOURCE")
     print("Please create .env file from .env.example")
-    exit(1)
+    sys.exit(1)
 
 # Type narrowing
 assert base_url is not None

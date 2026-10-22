@@ -1,6 +1,6 @@
 repos:
     - repo: https://github.com/astral-sh/ruff-pre-commit
-      rev: v0.14.4
+      rev: v0.17.1
       hooks:
           - id: ruff
             args: [--fix]
@@ -17,7 +17,7 @@ repos:
           - id: check-toml
 
     - repo: https://github.com/RobertCraigie/pyright-python
-      rev: v1.1.407
+      rev: v1.1.414
       hooks:
           - id: pyright
             additional_dependencies:
