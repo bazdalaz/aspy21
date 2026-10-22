@@ -29,6 +29,7 @@
 - Pandas DataFrame or JSON output with optional status and description fields
 - Enum-based parameters for cleaner, type-safe API
 - Configurable row limits and query parameters
+- Automatic retries of transient failures (connection errors, HTTP 429/502/503/504)
 - Type-annotated and fully tested (88% coverage)
 
 ### Use Cases
@@ -559,6 +560,7 @@ with AspenClient(base_url=url, auth=auth, cache=True) as client:
 | `datasource` | str\|None | None | Aspen datasource name (required for search) |
 | `cache` | AspenCache\|CacheConfig\|bool\|None | None | Enable caching: True (default config), CacheConfig instance, or AspenCache instance |
 | `server_timezone` | str\|tzinfo\|None | None | Time zone of the IP.21 server, e.g. `"Europe/Berlin"`. See [Timestamps and Time Zones](#timestamps-and-time-zones) |
+| `retries` | int | 2 | How many times to repeat a request after a transient failure; 0 disables retries. See [Retries](#retries) |
 
 ### read() Method
 
@@ -816,6 +818,31 @@ with AspenClient(
 
 Aggregate values (AVG, MIN, MAX, RNG) are stamped at the end of their period.
 
+### Retries
+
+Requests that fail for a reason likely to pass are repeated, up to `retries` times
+(default: 2, so at most 3 attempts):
+
+- **Retried**: connection errors (refused, reset, dropped), connect timeouts, and HTTP 429,
+  502, 503 and 504
+- **Not retried**: read timeouts (a query slow enough to time out usually times out again,
+  and repeating it adds load on the historian), other HTTP errors such as 401 or 500, and
+  SQL errors (`AspenSqlError`)
+
+Between attempts the client waits 0.5s, then 1s, 2s and so on up to 8s. If the server sends
+a `Retry-After` header (in seconds), that wait is used instead, up to 30s. Each retry is
+logged as a warning. When all attempts fail, the error from the last one is raised.
+
+```python
+# More attempts for an unreliable network
+client = AspenClient(base_url=..., retries=5)
+
+# Fail fast, no retries
+client = AspenClient(base_url=..., retries=0)
+```
+
+Retries apply to every request, including those sent through a custom `http_client`.
+
 ---
 
 ## Error Handling
@@ -881,7 +908,7 @@ ruff format
 
 - **httpx** (>= 0.27) - HTTP client with async support
 - **pandas** (>= 2.0) - DataFrame output and date parsing
-- **tenacity** (>= 9.0)
+- **tenacity** (>= 9.0) - Retries of transient failures
 
 ### Development Dependencies
 

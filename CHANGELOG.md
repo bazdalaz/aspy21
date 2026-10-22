@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Automatic retries of transient failures, controlled by the new `retries` option on
+  `AspenClient` (default 2, so up to 3 attempts; `retries=0` disables them). Connection
+  errors, connect timeouts and HTTP 429/502/503/504 are retried with exponential backoff
+  (0.5s up to 8s) or the server's `Retry-After` (up to 30s). Read timeouts, other HTTP
+  errors and SQL errors are not retried. Each retry is logged as a warning
+
+### Changed
+- A request that fails with a transient error is now repeated before the error is raised,
+  so such failures take longer to surface. Pass `retries=0` for the previous behavior
+
 ## [0.0.8] - 2026-10-22
 
 **Cache correctness release** - Cache hits now always return the data the request asked
