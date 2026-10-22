@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DEBUG log no longer reports an unchanged row limit for single-tag reads
 
 ### Fixed
+- `limit` was not applied per tag in RAW and INT reads of several tags. The server's row
+  limit covers the whole result, which it returns grouped by tag, so once the first tag
+  had more than `limit` values it filled the result and later tags came back with fewer
+  values or none (confirmed on a production server). Tags cut short are now read again
+  one at a time. Reads that stay below the limit still take a single query
+- A tag that returns `limit` rows now logs a warning, since its later values in the range
+  were not read
 - JSON output (the default) dropped every value stored as an integer, so integer-valued
   tags returned no data. Integer and status values are now returned, and values are plain
   Python types (`1`, `2.5`) instead of numpy scalars. An integer tag read together with a
@@ -37,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `examples/multi_tag_merge.py` checks how multi-tag reads are merged: offline with
   mocked responses (gaps, duplicate timestamps, integers), then against the server in `.env`
+- `scripts/check_row_limits.py` checks row limits and RAW intervals against the server in
+  `.env`
 - The package now ships a `py.typed` marker (PEP 561), so type checkers such as mypy use
   its annotations instead of treating it as untyped
 - Typed overloads for `read()` and `search()`: editors and type checkers infer
