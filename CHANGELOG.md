@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.8] - 2026-10-22
+
+**Cache correctness release** - Cache hits now always return the data the request asked
+for, and `invalidate_cache()` removes matching entries.
+
 ### Fixed
 - Cached `read()` results were returned for requests that should give a different result:
   a cached JSON result was served for a DataFrame request (and the reverse), results
@@ -230,7 +235,8 @@ pip install aspy21
 
 This is the first stable release. The API is considered stable and follows semantic versioning. Breaking changes will only occur in major version updates (e.g., 1.0.0).
 
-[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.7...HEAD
+[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.8...HEAD
+[0.0.8]: https://github.com/bazdalaz/aspy21/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/bazdalaz/aspy21/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/bazdalaz/aspy21/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/bazdalaz/aspy21/compare/v0.0.2...v0.0.5
