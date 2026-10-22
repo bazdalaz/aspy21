@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- JSON output (the default) dropped every value stored as an integer, so integer-valued
+  tags returned no data. Integer and status values are now returned, and values are plain
+  Python types (`1`, `2.5`) instead of numpy scalars. An integer tag read together with a
+  float tag no longer comes back as floats
+- Reading several tags failed with `InvalidIndexError` when one tag had two values at the
+  same timestamp and another tag did not, and a tag with one value at that timestamp was
+  repeated on each of the other tag's rows. Every value is now kept once
+
+### Added
+- `examples/multi_tag_merge.py` checks how multi-tag reads are merged: offline with
+  mocked responses (gaps, duplicate timestamps, integers), then against the server in `.env`
+
 ### Changed
 - Much smaller DEBUG logs for aggregate reads: the parser no longer logs every row and
   the reader no longer logs the full response body (a 500-character preview remains).
