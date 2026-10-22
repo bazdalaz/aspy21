@@ -1,5 +1,9 @@
 """Comprehensive tests for response parsers, focusing on error handling and edge cases."""
 
+from __future__ import annotations
+
+import logging
+
 import pandas as pd
 import pytest
 
@@ -390,3 +394,85 @@ class TestSqlAggregatesResponseParser:
         )
         # Should handle IP_TAG_NAME field
         assert isinstance(frames, list)
+
+
+def _aggregates_response(rows):
+    """Aggregates response in the SQL 'Original' format, as returned by IP.21."""
+    cols = [{"i": 0, "n": "ts"}, {"i": 1, "n": "name"}, {"i": 2, "n": "avg"}]
+    return {"data": [{"r": "D", "cols": cols, "rows": rows}]}
+
+
+def _row(ts: str, name: str = "TAG1", value: float | None = 1.0) -> dict:
+    fields = [{"i": 0, "v": ts}, {"i": 1, "v": name}]
+    if value is not None:
+        fields.append({"i": 2, "v": value})
+    return {"fld": fields}
+
+
+class TestAggregatesParserLogging:
+    """Log volume must not grow with the number of rows."""
+
+    def _parse(self, rows, caplog, level=logging.DEBUG):
+        with caplog.at_level(level, logger="aspy21.readers.response_parser"):
+            return SqlAggregatesResponseParser().parse(
+                response=_aggregates_response(rows),
+                tag_names=["TAG1"],
+                value_column="avg",
+                max_rows=0,
+            )
+
+    def test_debug_log_size_independent_of_row_count(self, caplog):
+        ts = pd.date_range("2025-01-01", periods=1000, freq="min")
+        frames, _ = self._parse([_row(str(t)) for t in ts], caplog)
+
+        assert len(frames[0]) == 1000
+        assert len(caplog.records) <= 6
+        assert all(len(r.getMessage()) < 200 for r in caplog.records)
+
+    def test_no_info_messages(self, caplog):
+        """Per-tag parse summaries are DEBUG; the formatter reports totals at INFO."""
+        self._parse([_row("2025-01-01 00:00:00")], caplog, level=logging.INFO)
+
+        assert caplog.records == []
+
+    def test_rows_without_value_summarized_once(self, caplog):
+        rows = [_row(f"2025-01-01 00:{m:02d}:00", value=None) for m in range(50)]
+        rows.append(_row("2025-01-01 01:00:00"))
+        frames, _ = self._parse(rows, caplog, level=logging.WARNING)
+
+        assert len(frames[0]) == 1
+        messages = [r.getMessage() for r in caplog.records]
+        assert messages == [
+            "Skipped 50 record(s) without value column 'avg' for TAG1, e.g. fields ['ts', 'name']"
+        ]
+
+    def test_rows_without_timestamp_summarized_once(self, caplog):
+        rows = [{"fld": [{"i": 1, "v": "TAG1"}, {"i": 2, "v": 1.0}]} for _ in range(20)]
+        self._parse(rows, caplog, level=logging.WARNING)
+
+        messages = [r.getMessage() for r in caplog.records]
+        assert messages[0] == "Skipped 20 record(s) without timestamp for TAG1"
+        assert len(messages) == 2  # plus "No valid rows extracted for tag TAG1"
+
+    def test_invalid_rows_summarized_once(self, caplog):
+        rows = [{"bad": i} for i in range(30)] + [_row("2025-01-01 00:00:00")]
+        frames, _ = self._parse(rows, caplog, level=logging.WARNING)
+
+        assert len(frames[0]) == 1
+        messages = [r.getMessage() for r in caplog.records]
+        assert messages == ["Skipped 30 row(s) with invalid structure, e.g. {'bad': 0}"]
+
+    def test_records_without_tag_name_summarized_once(self, caplog):
+        rows = [{"fld": [{"i": 0, "v": "2025-01-01"}, {"i": 2, "v": 1.0}]} for _ in range(10)]
+        rows.append(_row("2025-01-01 00:00:00"))
+        self._parse(rows, caplog, level=logging.WARNING)
+
+        messages = [r.getMessage() for r in caplog.records]
+        assert messages == [
+            "Skipped 10 record(s) without a tag name field, e.g. fields ['ts', 'avg']"
+        ]
+
+    def test_response_body_not_logged_by_parser(self, caplog):
+        self._parse([_row("2025-01-01 00:00:00", value=123.456)], caplog)
+
+        assert "123.456" not in caplog.text

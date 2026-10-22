@@ -120,11 +120,7 @@ class AggregatesReader(BaseReader):
             response = self._post_sql(xml_query)
 
             logger.debug(f"Response status: {response.status_code}")
-            logger.debug(f"Response headers: {dict(response.headers)}")
-            logger.debug(
-                f"Response content-type: {response.headers.get('content-type', 'unknown')}"
-            )
-            logger.debug(f"Response text (first 1000 chars): {response.text[:1000]}")
+            logger.debug(f"Response content (first 500 chars): {response.text[:500]}")
 
         except Exception as e:
             logger.error(f"HTTP request failed: {type(e).__name__}: {e}")
@@ -133,10 +129,6 @@ class AggregatesReader(BaseReader):
         # Parse response as JSON
         try:
             response_data = response.json()
-            logger.debug(f"Parsed JSON type: {type(response_data)}")
-            keys = response_data.keys() if isinstance(response_data, dict) else "N/A"
-            logger.debug(f"Parsed JSON keys (if dict): {keys}")
-            logger.debug(f"Parsed JSON content: {response_data}")
         except Exception as e:
             logger.error(f"Failed to parse response as JSON: {type(e).__name__}: {e}")
             logger.error(f"Response text: {response.text[:2000]}")
