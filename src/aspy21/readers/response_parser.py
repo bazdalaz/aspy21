@@ -210,13 +210,9 @@ class SqlAggregatesResponseParser(ResponseParser):
         """
         from collections import defaultdict
 
-        logger.debug("SqlAggregatesResponseParser.parse called")
-        logger.debug(f"Response type: {type(response)}")
-        keys = response.keys() if isinstance(response, dict) else "N/A"
-        logger.debug(f"Response keys (if dict): {keys}")
-        logger.debug(f"Response content (first 500 chars): {str(response)[:500]}")
-        logger.debug(f"Tag names: {tag_names}")
-        logger.debug(f"Value column: {value_column}")
+        logger.debug(
+            f"Parsing aggregates response for {len(tag_names)} tag(s), column {value_column}"
+        )
 
         if not response:
             logger.warning("Empty SQL aggregates response")
@@ -225,14 +221,11 @@ class SqlAggregatesResponseParser(ResponseParser):
         # Handle SQL response format: {"data": [{"cols": [...], "rows": [...]}]}
         records = []
         if isinstance(response, dict):
-            logger.debug("Response is dict, extracting 'data' field")
             if "data" not in response:
                 logger.error(f"Response dict has no 'data' field. Keys: {list(response.keys())}")
                 return [], {}
 
             data_array = response["data"]
-            length = len(data_array) if isinstance(data_array, list) else "N/A"
-            logger.debug(f"data_array type: {type(data_array)}, length: {length}")
 
             if not isinstance(data_array, list) or not data_array:
                 logger.error("Invalid or empty 'data' array in response")
@@ -240,9 +233,6 @@ class SqlAggregatesResponseParser(ResponseParser):
 
             # Get first result set
             result_set = data_array[0]
-            logger.debug(f"result_set type: {type(result_set)}")
-            keys = result_set.keys() if isinstance(result_set, dict) else "N/A"
-            logger.debug(f"result_set keys (if dict): {keys}")
 
             if not isinstance(result_set, dict):
                 logger.error(f"result_set is not a dict: {type(result_set)}")
@@ -253,7 +243,6 @@ class SqlAggregatesResponseParser(ResponseParser):
             rows = result_set.get("rows", [])
 
             logger.debug(f"Found {len(cols)} columns and {len(rows)} rows")
-            logger.debug(f"Column definitions: {cols}")
 
             if not cols or not rows:
                 logger.warning("No columns or rows in SQL aggregates response")
@@ -265,12 +254,11 @@ class SqlAggregatesResponseParser(ResponseParser):
                 if isinstance(col, dict) and "i" in col and "n" in col:
                     col_map[col["i"]] = col["n"]
 
-            logger.debug(f"Column mapping: {col_map}")
-
             # Convert rows to list of dicts
-            for row_idx, row in enumerate(rows):
+            invalid_rows = []
+            for row in rows:
                 if not isinstance(row, dict) or "fld" not in row:
-                    logger.warning(f"Row {row_idx} has invalid structure: {row}")
+                    invalid_rows.append(row)
                     continue
 
                 fields = row["fld"]
@@ -285,12 +273,15 @@ class SqlAggregatesResponseParser(ResponseParser):
 
                 if record:
                     records.append(record)
-                    logger.debug(f"Row {row_idx} record: {record}")
 
+            if invalid_rows:
+                logger.warning(
+                    f"Skipped {len(invalid_rows)} row(s) with invalid structure, "
+                    f"e.g. {invalid_rows[0]}"
+                )
             logger.debug(f"Extracted {len(records)} records from SQL response")
 
         elif isinstance(response, list):
-            logger.debug("Response is already a list of records")
             records = [record for record in response if isinstance(record, dict)]
         else:
             logger.error(f"Unexpected response type: {type(response)}")
@@ -304,13 +295,12 @@ class SqlAggregatesResponseParser(ResponseParser):
         tag_records: dict[str, list[dict]] = defaultdict(list)
         tag_descriptions: dict[str, str] = {}
 
-        for i, record in enumerate(records):
-            logger.debug(f"Processing record {i}: {record}")
-
+        unnamed = []
+        for record in records:
             # Tag name might be in different fields depending on query structure
             tag_name = record.get("name") or record.get("ip_tag_name")
             if not tag_name:
-                logger.warning(f"Record {i} has no tag name field: {list(record.keys())}")
+                unnamed.append(record)
                 continue
 
             tag_records[tag_name].append(record)
@@ -320,6 +310,11 @@ class SqlAggregatesResponseParser(ResponseParser):
             if tag_name not in tag_descriptions and desc_field:
                 tag_descriptions[tag_name] = desc_field or ""
 
+        if unnamed:
+            logger.warning(
+                f"Skipped {len(unnamed)} record(s) without a tag name field, "
+                f"e.g. fields {list(unnamed[0].keys())}"
+            )
         logger.debug(f"Grouped records into {len(tag_records)} tags")
 
         # Build DataFrame for each tag
@@ -331,15 +326,16 @@ class SqlAggregatesResponseParser(ResponseParser):
                 logger.warning(f"No data in SQL aggregates response for tag {tag_name}")
                 continue
 
-            logger.debug(f"Building DataFrame for {tag_name} with {len(records_for_tag)} records")
-
             # Build DataFrame from records
             rows = []
+            no_timestamp = 0
+            no_value: list[str] = []  # field names of the first record without a value
+            no_value_count = 0
             for record in records_for_tag:
                 # Timestamp might be in different fields
                 ts_value = _first_not_none(record, "ts", "ip_trend_time")
                 if ts_value is None:
-                    logger.warning(f"Record missing timestamp: {record}")
+                    no_timestamp += 1
                     continue
 
                 timestamp = pd.to_datetime(ts_value)
@@ -347,13 +343,20 @@ class SqlAggregatesResponseParser(ResponseParser):
                 # Value column might have prefix
                 value = _first_not_none(record, value_column, f"ip_{value_column}")
                 if value is None:
-                    logger.warning(
-                        f"Record missing value column '{value_column}': {list(record.keys())}"
-                    )
+                    no_value_count += 1
+                    no_value = no_value or list(record.keys())
                     continue
 
                 row = {"time": timestamp, tag_name: value}
                 rows.append(row)
+
+            if no_timestamp:
+                logger.warning(f"Skipped {no_timestamp} record(s) without timestamp for {tag_name}")
+            if no_value_count:
+                logger.warning(
+                    f"Skipped {no_value_count} record(s) without value column '{value_column}' "
+                    f"for {tag_name}, e.g. fields {no_value}"
+                )
 
             if rows:
                 df = pd.DataFrame(rows)
@@ -361,9 +364,9 @@ class SqlAggregatesResponseParser(ResponseParser):
                 if max_rows > 0:
                     df = df.iloc[:max_rows]
                 frames.append(df)
-                logger.info(f"Parsed {len(df)} aggregate records for tag {tag_name}")
+                logger.debug(f"Parsed {len(df)} aggregate records for tag {tag_name}")
             else:
                 logger.warning(f"No valid rows extracted for tag {tag_name}")
 
-        logger.info(f"Successfully parsed {len(frames)} DataFrames from aggregates response")
+        logger.debug(f"Parsed {len(frames)} DataFrame(s) from aggregates response")
         return frames, tag_descriptions

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Much smaller DEBUG logs for aggregate reads: the parser no longer logs every row and
+  the reader no longer logs the full response body (a 500-character preview remains).
+  A 1,440-row read went from about 2,900 log lines to 20
+- Rows the aggregates parser skips (no timestamp, no value, no tag name, invalid
+  structure) are reported in one warning per tag with a count, instead of one warning
+  per row. Per-tag parse summaries moved from INFO to DEBUG
+
 ## [0.0.9] - 2026-10-22
 
 **Retry release** - Transient request failures are retried, and `configure_logging()`

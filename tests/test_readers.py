@@ -1,5 +1,7 @@
 """Tests for reader exception handling (HTTP errors, JSON parse errors, empty responses)."""
 
+import logging
+
 import httpx
 import pytest
 
@@ -500,3 +502,53 @@ class TestReaderEdgeCases:
 
         # All should succeed without errors
         client.close()
+
+
+class TestReaderLogVolume:
+    """DEBUG logs show a preview of the response, never the whole body."""
+
+    def test_aggregates_read_logs_bounded_preview(self, mock_api, caplog):
+        rows = [
+            {
+                "fld": [
+                    {"i": 0, "v": f"01-JAN-25 {h:02d}:{m:02d}:00.0"},
+                    {"i": 1, "v": "TAG1"},
+                    {"i": 2, "v": 1.0 + h + m / 100},
+                ]
+            }
+            for h in range(24)
+            for m in range(60)
+        ]
+        mock_api.post("https://aspen.local/ProcessData/AtProcessDataREST.dll/SQL").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "cols": [
+                                {"i": 0, "n": "ts"},
+                                {"i": 1, "n": "name"},
+                                {"i": 2, "n": "avg"},
+                            ],
+                            "rows": rows,
+                        }
+                    ]
+                },
+            )
+        )
+
+        client = AspenClient(
+            "https://aspen.local/ProcessData/AtProcessDataREST.dll", datasource="IP21"
+        )
+        with caplog.at_level(logging.DEBUG, logger="aspy21"), client:
+            data = client.read(
+                ["TAG1"],
+                start="2025-01-01 00:00:00",
+                end="2025-01-02 00:00:00",
+                read_type=ReaderType.AVG,
+                interval=60,
+            )
+
+        assert len(data) == 1440
+        assert len(caplog.records) < 25
+        assert len(caplog.text) < 5000
