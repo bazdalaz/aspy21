@@ -552,6 +552,7 @@ with AspenClient(base_url=url, auth=auth, cache=True) as client:
 | `verify_ssl` | bool | True | Whether to verify SSL certificates |
 | `datasource` | str\|None | None | Aspen datasource name (required for search) |
 | `cache` | AspenCache\|CacheConfig\|bool\|None | None | Enable caching: True (default config), CacheConfig instance, or AspenCache instance |
+| `server_timezone` | str\|tzinfo\|None | None | Time zone of the IP.21 server, e.g. `"Europe/Berlin"`. See [Timestamps and Time Zones](#timestamps-and-time-zones) |
 
 ### read() Method
 
@@ -783,6 +784,32 @@ with AspenClient(
     pass
 ```
 
+### Timestamps and Time Zones
+
+IP.21 interprets query timestamps in the server's local time and returns server local
+times (the REST API labels them `Z`, but they are not UTC). aspy21 therefore works in
+server local time:
+
+- **Default (`server_timezone=None`)**: returned timestamps are naive server-local times.
+  Naive `start`/`end` values are sent as they are; timezone-aware values are converted
+  to this machine's local zone first.
+- **`server_timezone="Europe/Berlin"`**: returned timestamps are timezone-aware in that
+  zone, and timezone-aware `start`/`end` values are converted to it.
+- For a server that really returns UTC, use `server_timezone="UTC"`.
+
+```python
+with AspenClient(
+    base_url="https://aspen.example.com/ProcessData",
+    auth=("user", "password"),
+    datasource="IP21",
+    server_timezone="Europe/Berlin",
+) as client:
+    data = client.read(["ATI111"], start="2025-06-20T06:00:00Z", end="2025-06-20T07:00:00Z")
+    # Queries 08:00-09:00 server time; timestamps come back as "...+02:00"
+```
+
+Aggregate values (AVG, MIN, MAX, RNG) are stamped at the end of their period.
+
 ### Retry Behavior
 
 The client automatically retries failed requests with exponential backoff:
@@ -796,7 +823,7 @@ The client automatically retries failed requests with exponential backoff:
 ## Error Handling
 
 ```python
-from aspy21 import AspenClient, OutputFormat
+from aspy21 import AspenClient, AspenSqlError, OutputFormat
 import httpx
 
 try:
@@ -811,6 +838,8 @@ try:
             end="2025-06-20 09:00:00",
             output=OutputFormat.DATAFRAME,
         )
+except AspenSqlError as e:
+    print(f"IP.21 rejected the query: {e}")  # Returned by the server with HTTP 200
 except httpx.HTTPStatusError as e:
     print(f"HTTP error: {e.response.status_code}")
 except httpx.RequestError as e:

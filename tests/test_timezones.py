@@ -1,6 +1,6 @@
 """Tests for server-local time handling.
 
-A production IP.21 server (UTC+3) showed that:
+An IP.21 server in a UTC+3 zone showed that:
 - query timestamps are interpreted as server local time, and
 - returned timestamps are server local wall-clock times labelled "Z", e.g. a history
   window requested from local 06:17:09 came back as "2026-10-22T06:17:09.000000Z",
@@ -45,7 +45,7 @@ def test_history_timestamps_are_server_local_by_default(mock_api):
 def test_history_timestamps_with_server_timezone(mock_api):
     mock_api.post(SQL_URL).mock(return_value=httpx.Response(200, json=HISTORY_RESPONSE))
 
-    with AspenClient(base_url=BASE_URL, datasource="IP21", server_timezone="Asia/Jerusalem") as c:
+    with AspenClient(base_url=BASE_URL, datasource="IP21", server_timezone="Europe/Athens") as c:
         result = c.read(["T1"], **RANGE, read_type=ReaderType.RAW)
         df = c.read(["T1"], **RANGE, read_type=ReaderType.RAW, output=OutputFormat.DATAFRAME)
 
@@ -58,7 +58,7 @@ def test_history_timestamps_with_server_timezone(mock_api):
 def test_naive_input_is_sent_unchanged(mock_api):
     route = mock_api.post(SQL_URL).mock(return_value=httpx.Response(200, json=[]))
 
-    with AspenClient(base_url=BASE_URL, datasource="IP21", server_timezone="Asia/Jerusalem") as c:
+    with AspenClient(base_url=BASE_URL, datasource="IP21", server_timezone="Europe/Athens") as c:
         c.read(["T1"], **RANGE, read_type=ReaderType.RAW)
 
     assert "'22-Oct-26 06:17:09' and '22-Oct-26 06:27:09'" in sent_sql(route)
@@ -68,7 +68,7 @@ def test_naive_input_is_sent_unchanged(mock_api):
 def test_aware_input_is_converted_to_server_timezone(mock_api, read_type):
     route = mock_api.post(SQL_URL).mock(return_value=httpx.Response(200, json=[]))
 
-    with AspenClient(base_url=BASE_URL, datasource="IP21", server_timezone="Asia/Jerusalem") as c:
+    with AspenClient(base_url=BASE_URL, datasource="IP21", server_timezone="Europe/Athens") as c:
         c.read(
             ["T1"],
             start="2026-10-22T03:17:09Z",
@@ -107,12 +107,12 @@ def test_snapshot_time_with_server_timezone(mock_api):
         return_value=httpx.Response(200, json=[{"name": "T1", "name->ip_input_value": 8.16}])
     )
 
-    with AspenClient(base_url=BASE_URL, datasource="IP21", server_timezone="Asia/Jerusalem") as c:
+    with AspenClient(base_url=BASE_URL, datasource="IP21", server_timezone="Europe/Athens") as c:
         df = c.read(["T1"], output=OutputFormat.DATAFRAME)
 
     assert isinstance(df, pd.DataFrame)
     ts = cast(pd.Timestamp, df.index[0])
-    assert str(ts.tzinfo) == "Asia/Jerusalem"
+    assert str(ts.tzinfo) == "Europe/Athens"
     assert abs(ts - pd.Timestamp.now(tz="UTC")) < pd.Timedelta(minutes=1)
 
 

@@ -77,7 +77,7 @@ class AggregatesReader(BaseReader):
             tags: List of tag names
             start: Start timestamp
             end: End timestamp
-            interval: Not used for aggregates (period is calculated from start/end)
+            interval: Aggregation period in seconds; if None, one value for the whole range
             read_type: Type of aggregation (MIN, MAX, AVG, RNG)
             include_status: Not supported for aggregates (ignored)
             max_rows: Maximum rows (not typically applicable for aggregates)

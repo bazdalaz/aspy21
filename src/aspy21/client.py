@@ -303,10 +303,12 @@ class AspenClient:
         Args:
             tags: List of tag names to retrieve
             start: Start timestamp (ISO format or compatible string). If omitted, defaults to
-                SNAPSHOT read.
+                SNAPSHOT read. Naive values are server local time; timezone-aware values
+                are converted (see server_timezone).
             end: End timestamp (ISO format or compatible string). If omitted, defaults to
                 SNAPSHOT read.
-            interval: Optional interval in seconds for aggregated data (AVG reads)
+            interval: Optional interval in seconds for aggregated data (AVG reads).
+                IP.21 stamps each aggregate at the end of its period.
             read_type: Type of data retrieval (RAW, INT, SNAPSHOT, AVG) (default: INT)
             include: Field inclusion options (default: NONE)
                 - NONE: Include only timestamp and value

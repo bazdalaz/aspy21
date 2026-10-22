@@ -100,6 +100,8 @@ def localize_server_index(df: pd.DataFrame, server_tz: str | tzinfo | None) -> p
         try:
             index = index.tz_localize(server_tz, ambiguous="infer", nonexistent="shift_forward")
         except Exception:
+            # Inference fails e.g. for a single repeated time; the zone was validated by
+            # check_timezone, so any other error is raised again by the call below
             index = index.tz_localize(
                 server_tz, ambiguous=np.zeros(len(index), dtype=bool), nonexistent="shift_forward"
             )
