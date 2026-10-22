@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.9] - 2026-10-22
+
+**Retry release** - Transient request failures are retried, and `configure_logging()`
+applies to the whole library.
+
 ### Added
 - Automatic retries of transient failures, controlled by the new `retries` option on
   `AspenClient` (default 2, so up to 3 attempts; `retries=0` disables them). Connection
@@ -254,7 +259,8 @@ pip install aspy21
 
 This is the first stable release. The API is considered stable and follows semantic versioning. Breaking changes will only occur in major version updates (e.g., 1.0.0).
 
-[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.8...HEAD
+[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.9...HEAD
+[0.0.9]: https://github.com/bazdalaz/aspy21/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/bazdalaz/aspy21/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/bazdalaz/aspy21/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/bazdalaz/aspy21/compare/v0.0.5...v0.0.6
