@@ -129,7 +129,9 @@ class SqlHistoryQueryBuilder(QueryBuilder):
             ReaderType.RAW: 4,  # Raw historical data
             ReaderType.INT: 1,  # Interpolated data
         }
-        request_value = request_map.get(read_type, ReaderType.INT)  # Default to INTERPOLATED
+        if read_type not in request_map:
+            raise ValueError(f"History queries support RAW and INT, got {read_type}")
+        request_value = request_map[read_type]
 
         # Build SELECT clause with optional fields
         select_fields = ["ts", "name"]
@@ -176,7 +178,7 @@ class SqlHistoryQueryBuilder(QueryBuilder):
         xml = (
             f'<SQL g="aspy21_history" t="SQLplus" ds={xml_attr(datasource)} '
             f'dso="CHARINT=N;CHARFLOAT=N;CHARTIME=N;CONVERTERRORS=N" '
-            f'm="{int(max_rows)}" to="30   " response="Record" s="1">'  # s=1 for Select
+            f'm="{int(max_rows)}" to="30" response="Record" s="1">'  # s=1 for Select
             f"{cdata(sql_query)}"
             f"</SQL>"
         )

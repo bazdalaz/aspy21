@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from ..errors import raise_for_sql_error
+from ..errors import AspenSqlError, raise_for_sql_error
 from ..query_builder import SqlHistoryQueryBuilder
 from .base_reader import BaseReader
 from .response_parser import SqlHistoryResponseParser
@@ -81,7 +81,8 @@ class SqlHistoryReader(BaseReader):
         # Multiply max_rows by number of tags to ensure each tag gets fair share
         # (SQL max_rows applies to total result set, not per tag)
         batched_max_rows = max_rows * len(tags)
-        logger.debug(f"Adjusted max_rows from {max_rows} to {batched_max_rows} for batched query")
+        if batched_max_rows != max_rows:
+            logger.debug(f"Row limit for {len(tags)} tags: {batched_max_rows} ({max_rows} per tag)")
 
         assert start is not None
         assert end is not None
@@ -120,14 +121,9 @@ class SqlHistoryReader(BaseReader):
 
         try:
             sql_response = response.json()
-        except Exception as e:
-            logger.error("Failed to parse JSON response from SQL endpoint")
-            logger.error(f"Response status: {response.status_code}")
-            logger.error(f"Response headers: {dict(response.headers)}")
-            logger.error(f"Response content: {response.text[:1000]}")
-            raise ValueError(
-                f"SQL endpoint returned non-JSON response: {response.text[:200]}"
-            ) from e
+        except ValueError as e:
+            message = f"SQL endpoint returned non-JSON response: {response.text[:200]!r}"
+            raise AspenSqlError(message) from e
 
         raise_for_sql_error(sql_response)
 

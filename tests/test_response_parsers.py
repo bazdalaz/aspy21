@@ -7,6 +7,7 @@ import logging
 import pandas as pd
 import pytest
 
+from aspy21 import AspenSqlError
 from aspy21.readers.response_parser import (
     SqlAggregatesResponseParser,
     SqlHistoryResponseParser,
@@ -160,28 +161,26 @@ class TestSqlAggregatesResponseParser:
         assert isinstance(descriptions, dict)
 
     def test_response_missing_data_field(self):
-        """Test when response dict has no 'data' field."""
+        """Test when response dict has no 'data' field: an error, not an empty result."""
         parser = SqlAggregatesResponseParser()
-        frames, descriptions = parser.parse(
-            response={"result": "error", "message": "something went wrong"},
-            tag_names=["TAG1"],
-            value_column="AVG",
-            max_rows=1000,
-        )
-        assert frames == []
-        assert descriptions == {}
+        with pytest.raises(AspenSqlError, match="no 'data' field"):
+            parser.parse(
+                response={"result": "error", "message": "something went wrong"},
+                tag_names=["TAG1"],
+                value_column="AVG",
+                max_rows=1000,
+            )
 
     def test_data_field_not_a_list(self):
-        """Test when 'data' field is not a list."""
+        """Test when 'data' field is not a list: an error, not an empty result."""
         parser = SqlAggregatesResponseParser()
-        frames, descriptions = parser.parse(
-            response={"data": "not a list"},
-            tag_names=["TAG1"],
-            value_column="AVG",
-            max_rows=1000,
-        )
-        assert frames == []
-        assert descriptions == {}
+        with pytest.raises(AspenSqlError, match="'data' is str"):
+            parser.parse(
+                response={"data": "not a list"},
+                tag_names=["TAG1"],
+                value_column="AVG",
+                max_rows=1000,
+            )
 
     def test_empty_data_array(self):
         """Test when data array is empty."""
@@ -196,16 +195,15 @@ class TestSqlAggregatesResponseParser:
         assert descriptions == {}
 
     def test_result_set_not_dict(self):
-        """Test when first element of data array is not a dict."""
+        """Test when first element of data array is not a dict: an error, not an empty result."""
         parser = SqlAggregatesResponseParser()
-        frames, descriptions = parser.parse(
-            response={"data": ["not a dict"]},
-            tag_names=["TAG1"],
-            value_column="AVG",
-            max_rows=1000,
-        )
-        assert frames == []
-        assert descriptions == {}
+        with pytest.raises(AspenSqlError, match="result set is str"):
+            parser.parse(
+                response={"data": ["not a dict"]},
+                tag_names=["TAG1"],
+                value_column="AVG",
+                max_rows=1000,
+            )
 
     def test_no_rows_in_result_set(self):
         """Test when result set has no rows."""

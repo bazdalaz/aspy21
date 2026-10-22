@@ -13,6 +13,8 @@ from typing import Any
 
 import pandas as pd
 
+from ..errors import AspenSqlError
+
 logger = logging.getLogger(__name__)
 
 
@@ -221,22 +223,26 @@ class SqlAggregatesResponseParser(ResponseParser):
         # Handle SQL response format: {"data": [{"cols": [...], "rows": [...]}]}
         records = []
         if isinstance(response, dict):
+            # A malformed response is an error, not "no data"
             if "data" not in response:
-                logger.error(f"Response dict has no 'data' field. Keys: {list(response.keys())}")
-                return [], {}
+                keys = list(response.keys())
+                raise AspenSqlError(f"Unexpected aggregates response: no 'data' field, keys {keys}")
 
             data_array = response["data"]
 
-            if not isinstance(data_array, list) or not data_array:
-                logger.error("Invalid or empty 'data' array in response")
+            if not isinstance(data_array, list):
+                kind = type(data_array).__name__
+                raise AspenSqlError(f"Unexpected aggregates response: 'data' is {kind}")
+            if not data_array:
+                logger.warning("Empty 'data' array in SQL aggregates response")
                 return [], {}
 
             # Get first result set
             result_set = data_array[0]
 
             if not isinstance(result_set, dict):
-                logger.error(f"result_set is not a dict: {type(result_set)}")
-                return [], {}
+                kind = type(result_set).__name__
+                raise AspenSqlError(f"Unexpected aggregates response: result set is {kind}")
 
             # Extract column definitions and row data
             cols = result_set.get("cols", [])
@@ -284,8 +290,8 @@ class SqlAggregatesResponseParser(ResponseParser):
         elif isinstance(response, list):
             records = [record for record in response if isinstance(record, dict)]
         else:
-            logger.error(f"Unexpected response type: {type(response)}")
-            return [], {}
+            kind = type(response).__name__
+            raise AspenSqlError(f"Unexpected aggregates response type: {kind}")
 
         if not records:
             logger.warning("No records extracted from SQL aggregates response")

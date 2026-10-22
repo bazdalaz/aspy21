@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from ..errors import raise_for_sql_error
+from ..errors import AspenSqlError, raise_for_sql_error
 from ..query_builder import SqlAggregatesQueryBuilder
 from .base_reader import BaseReader
 from .response_parser import SqlAggregatesResponseParser
@@ -116,23 +116,15 @@ class AggregatesReader(BaseReader):
         logger.debug(f"POST {sql_url}")
         logger.debug(f"SQL query XML: {xml_query}")
 
-        try:
-            response = self._post_sql(xml_query)
+        response = self._post_sql(xml_query)
+        logger.debug(f"Response status: {response.status_code}")
+        logger.debug(f"Response content (first 500 chars): {response.text[:500]}")
 
-            logger.debug(f"Response status: {response.status_code}")
-            logger.debug(f"Response content (first 500 chars): {response.text[:500]}")
-
-        except Exception as e:
-            logger.error(f"HTTP request failed: {type(e).__name__}: {e}")
-            raise
-
-        # Parse response as JSON
         try:
             response_data = response.json()
-        except Exception as e:
-            logger.error(f"Failed to parse response as JSON: {type(e).__name__}: {e}")
-            logger.error(f"Response text: {response.text[:2000]}")
-            raise
+        except ValueError as e:
+            message = f"SQL endpoint returned non-JSON response: {response.text[:200]!r}"
+            raise AspenSqlError(message) from e
 
         raise_for_sql_error(response_data)
 

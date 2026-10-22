@@ -911,7 +911,8 @@ Retries apply to every request, including those sent through a custom `http_clie
 IP.21 reports most errors with HTTP 200 and the error in the response body. These are
 raised as `AspenError`:
 
-- `AspenSqlError` - the SQL endpoint rejected a query (reads, search by description)
+- `AspenSqlError` - the SQL endpoint rejected a query (reads, search by description) or
+  returned a response that could not be read
 - `AspenBrowseError` - the Browse endpoint (search by tag name) reported an error or
   returned a response that could not be read
 

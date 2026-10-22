@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from ..errors import raise_for_sql_error
+from ..errors import AspenSqlError, raise_for_sql_error
 from ..query_builder import SqlSnapshotQueryBuilder
 from ..utils import server_now
 from .base_reader import BaseReader
@@ -101,13 +101,9 @@ class SnapshotReader(BaseReader):
 
         try:
             sql_response = response.json()
-        except Exception as e:
-            logger.error("Failed to parse JSON response from snapshot SQL endpoint")
-            logger.error(f"Response status: {response.status_code}")
-            logger.error(f"Response headers: {dict(response.headers)}")
-            logger.error(f"Response content: {response.text[:1000]}")
-            message = "Failed to parse JSON response from snapshot SQL endpoint"
-            raise ValueError(message) from e
+        except ValueError as e:
+            message = f"Snapshot SQL endpoint returned non-JSON response: {response.text[:200]!r}"
+            raise AspenSqlError(message) from e
 
         raise_for_sql_error(sql_response)
 
