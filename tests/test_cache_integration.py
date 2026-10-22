@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 import pandas as pd
@@ -722,7 +722,7 @@ class TestSearchCacheKey:
 class TestReadCacheKeyParams:
     """Unit tests for AspenClient._read_cache_key_params."""
 
-    BASE_PARAMS = {
+    BASE_PARAMS: ClassVar[dict[str, Any]] = {
         "tags": ["TAG1", "TAG2"],
         "start": "2025-01-01T00:00:00",
         "end": "2025-01-01T02:00:00",
