@@ -321,3 +321,35 @@ class TestCacheCopies:
         cache.set("test", records, key=1)
         records[0]["value"] = 99
         assert cache.get("test", key=1) == [{"value": 1}]
+
+
+class TestInvalidateWhere:
+    """Tests for AspenCache.invalidate_where()."""
+
+    def test_removes_matching_entries(self):
+        cache = AspenCache()
+        cache.set("a", 1, tag="X")
+        cache.set("a", 2, tag="Y")
+        cache.set("b", 3, tag="X")
+
+        count = cache.invalidate_where(lambda op, params: params.get("tag") == "X")
+
+        assert count == 2
+        assert cache.get("a", tag="Y") == 2
+        assert cache.get("a", tag="X") is None
+        assert cache.get("b", tag="X") is None
+
+    def test_predicate_sees_operation(self):
+        cache = AspenCache()
+        cache.set("a", 1, tag="X")
+        cache.set("b", 2, tag="X")
+
+        assert cache.invalidate_where(lambda op, params: op == "b") == 1
+        assert cache.get("a", tag="X") == 1
+
+    def test_no_match_returns_zero(self):
+        cache = AspenCache()
+        cache.set("a", 1, tag="X")
+
+        assert cache.invalidate_where(lambda op, params: False) == 0
+        assert cache.get_stats()["size"] == 1

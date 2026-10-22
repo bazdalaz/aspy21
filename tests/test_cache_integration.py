@@ -850,3 +850,123 @@ class TestCachedResultsAreCopies:
 
         assert again == ["TEMP_101", "TEMP_102"]
         assert len(mock_api.calls) == 1
+
+
+class TestInvalidateCache:
+    """AspenClient.invalidate_cache() removes matching read entries."""
+
+    @staticmethod
+    def _fill(client, *tag_lists, start=START, end=END):
+        for tags in tag_lists:
+            client.read(tags, start=start, end=end)
+
+    @respx.mock
+    def test_by_tag(self, mock_api):
+        _mock_sql(mock_api)
+        with _client() as client:
+            self._fill(client, ["TAG1"], ["TAG2"])
+            assert client.invalidate_cache(tags=["TAG1"]) == 1
+            self._fill(client, ["TAG1"], ["TAG2"])
+
+        # TAG1 is fetched again, TAG2 is still cached
+        assert len(mock_api.calls) == 3
+
+    @respx.mock
+    def test_entry_with_any_matching_tag_removed(self, mock_api):
+        _mock_sql(mock_api)
+        with _client() as client:
+            self._fill(client, ["TAG1", "TAG2"])
+            assert client.invalidate_cache(tags=["TAG2"]) == 1
+
+    @respx.mock
+    def test_unknown_tag_removes_nothing(self, mock_api):
+        _mock_sql(mock_api)
+        with _client() as client:
+            self._fill(client, ["TAG1"])
+            assert client.invalidate_cache(tags=["NOPE"]) == 0
+            self._fill(client, ["TAG1"])
+
+        assert len(mock_api.calls) == 1
+
+    @respx.mock
+    def test_all_variants_of_a_read_removed(self, mock_api):
+        """Entries differing only by output format or limit are all removed."""
+        _mock_sql(mock_api)
+        with _client() as client:
+            client.read(["TAG1"], start=START, end=END)
+            client.read(["TAG1"], start=START, end=END, output=OutputFormat.DATAFRAME)
+            client.read(["TAG1"], start=START, end=END, limit=1)
+            assert client.invalidate_cache(tags=["TAG1"]) == 3
+
+    @respx.mock
+    def test_by_time_range(self, mock_api):
+        _mock_sql(mock_api)
+        with _client() as client:
+            self._fill(client, ["TAG1"])
+            self._fill(client, ["TAG1"], start="2025-01-02 00:00:00", end="2025-01-02 02:00:00")
+            assert client.invalidate_cache(tags=["TAG1"], start=START, end=END) == 1
+            assert client.invalidate_cache(tags=["TAG1"]) == 1
+
+    @respx.mock
+    def test_start_only(self, mock_api):
+        _mock_sql(mock_api)
+        with _client() as client:
+            self._fill(client, ["TAG1"])
+            self._fill(client, ["TAG1"], end="2025-01-01 03:00:00")
+            self._fill(client, ["TAG1"], start="2025-01-01 01:00:00")
+            assert client.invalidate_cache(start=START) == 2
+
+    @respx.mock
+    def test_time_range_without_tags(self, mock_api):
+        _mock_sql(mock_api)
+        with _client() as client:
+            self._fill(client, ["TAG1"], ["TAG2"])
+            assert client.invalidate_cache(start=START, end=END) == 2
+
+    @respx.mock
+    def test_equivalent_timestamp_strings_match(self, mock_api):
+        """Start/end are compared as server times, not as raw strings."""
+        _mock_sql(mock_api)
+        with _client(server_timezone="UTC") as client:
+            self._fill(client, ["TAG1"])
+            count = client.invalidate_cache(
+                tags=["TAG1"],
+                start="2025-01-01T01:00:00+01:00",
+                end="2025-01-01T03:00:00+01:00",
+            )
+
+        assert count == 1
+
+    @respx.mock
+    def test_search_entries_kept(self, mock_api):
+        _mock_sql(mock_api)
+        route = _mock_browse(mock_api)
+        with _client() as client:
+            client.search(tag="TEMP*")
+            self._fill(client, ["TAG1"])
+            assert client.invalidate_cache(tags=["TAG1"]) == 1
+            client.search(tag="TEMP*")
+
+        assert route.call_count == 1
+
+    @respx.mock
+    def test_other_clients_entries_kept(self, mock_api):
+        """Invalidating on one client leaves other datasources' entries in a shared cache."""
+        _mock_sql(mock_api)
+        shared = AspenCache()
+        with _client(cache=shared) as c1, _client(cache=shared, datasource="IP21_B") as c2:
+            self._fill(c1, ["TAG1"])
+            self._fill(c2, ["TAG1"])
+            assert c1.invalidate_cache(tags=["TAG1"]) == 1
+            self._fill(c2, ["TAG1"])
+
+        assert len(mock_api.calls) == 2
+
+    def test_entries_not_written_by_read_ignored(self):
+        """Entries stored directly on a shared cache don't break tag matching."""
+        shared = AspenCache()
+        shared.set("read_historical", "raw", tags=["TAG1"])
+        with _client(cache=shared) as client:
+            assert client.invalidate_cache(tags=["TAG1"]) == 0
+
+        assert shared.get_stats()["size"] == 1

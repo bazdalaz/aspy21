@@ -479,13 +479,20 @@ print(f"Cleared {count} entries")
 #### Invalidate Specific Entries
 
 ```python
-# Invalidate cache for specific tags/time range
+# Invalidate cached reads for specific tags/time range
 count = client.invalidate_cache(
     tags=["TAG1", "TAG2"],
     start="2025-01-01 00:00:00",
     end="2025-01-01 01:00:00"
 )
+
+# Any argument can be omitted: this removes every cached read that includes TAG1
+count = client.invalidate_cache(tags=["TAG1"])
 ```
+
+A cached read is removed when it includes any of the given tags and its start and end
+match. Only reads from this client's server and datasource are affected; search results
+are kept.
 
 ### Performance Benefits
 

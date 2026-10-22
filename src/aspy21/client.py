@@ -23,6 +23,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Cache operations used for read() results (see _determine_cache_operation)
+_READ_CACHE_OPERATIONS = ("read_historical", "read_aggregates", "read_snapshot")
+
 
 def configure_logging(level: str | None = None) -> None:
     """Configure logging level for aspy21 library.
@@ -306,10 +309,16 @@ class AspenClient:
     ) -> int:
         """Invalidate specific cache entries.
 
+        With no arguments the whole cache is cleared. Otherwise cached read results
+        from this client's server and datasource are removed when they match every
+        argument given: any of their tags is in ``tags``, and their start and end
+        equal ``start`` and ``end``. Start and end are compared as server times, so
+        any string accepted by read() for the same instant matches.
+
         Args:
-            tags: Tag names to invalidate. If None, invalidates all.
-            start: Start timestamp to match
-            end: End timestamp to match
+            tags: Tag names to invalidate. If None, entries for any tags match.
+            start: Start timestamp to match. If None, any start matches.
+            end: End timestamp to match. If None, any end matches.
 
         Returns:
             Number of entries invalidated
@@ -320,13 +329,27 @@ class AspenClient:
         if tags is None and start is None and end is None:
             return self._cache.invalidate()
 
-        # Invalidate specific entries (will need to match parameters)
-        # For now, this is a basic implementation
-        count = 0
-        if tags:
-            for tag in tags:
-                count += self._cache.invalidate("read", tags=[tag], start=start, end=end)
-        return count
+        identity = self._client_cache_identity()
+        tag_set = set(tags) if tags is not None else None
+        start = to_server_time(start, self.server_timezone).isoformat() if start else None
+        end = to_server_time(end, self.server_timezone).isoformat() if end else None
+
+        def matches(operation: str, params: dict) -> bool:
+            if operation not in _READ_CACHE_OPERATIONS:
+                return False
+            if any(params.get(k) != v for k, v in identity.items()):
+                return False
+            if tag_set is not None:
+                cached_tags = params.get("tags")
+                if not isinstance(cached_tags, str):
+                    return False
+                if not tag_set.intersection(json.loads(cached_tags)):
+                    return False
+            if start is not None and params.get("start") != start:
+                return False
+            return end is None or params.get("end") == end
+
+        return self._cache.invalidate_where(matches)
 
     def read(
         self,

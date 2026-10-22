@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clients on different servers or datasources
 - Modifying a DataFrame or list returned by `read()` or `search()` changed what later
   cache hits returned. The cache now stores and returns copies
+- `invalidate_cache(tags=..., start=..., end=...)` never removed anything. It now removes
+  cached reads from this client's server and datasource that include any of the given
+  tags and match the given start and end
+
+### Added
+- `AspenCache.invalidate_where(predicate)` removes every entry for which
+  `predicate(operation, params)` is true
 
 ## [0.0.7] - 2026-10-22
 
