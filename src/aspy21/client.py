@@ -32,6 +32,8 @@ _READ_CACHE_OPERATIONS = ("read_historical", "read_aggregates", "read_snapshot")
 def configure_logging(level: str | None = None) -> None:
     """Configure logging level for aspy21 library.
 
+    Applies to every aspy21 module (client, readers, retries, cache), not only the client.
+
     Args:
         level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
                If None, reads from ASPEN_LOG_LEVEL environment variable.
@@ -41,16 +43,17 @@ def configure_logging(level: str | None = None) -> None:
         level = os.getenv("ASPEN_LOG_LEVEL", "WARNING")
 
     numeric_level = getattr(logging, level.upper(), logging.WARNING)
-    logger.setLevel(numeric_level)
+    package_logger = logging.getLogger("aspy21")
+    package_logger.setLevel(numeric_level)
 
     # Only add handler if logger doesn't have one already
-    if not logger.handlers:
+    if not package_logger.handlers:
         handler = logging.StreamHandler()
         formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
         )
         handler.setFormatter(formatter)
-        logger.addHandler(handler)
+        package_logger.addHandler(handler)
 
 
 class AspenClient:
@@ -86,7 +89,9 @@ class AspenClient:
             verify_ssl: Whether to verify SSL certificates (default: True)
             datasource: Aspen datasource name. If None, uses server default.
             http_client: Optional httpx.Client instance. If None, creates a new client.
-                        Useful for dependency injection and testing.
+                        Useful for dependency injection and testing. When given,
+                        timeout, verify_ssl and auth are not applied; configure them
+                        on the httpx.Client instead.
             cache: Cache configuration:
                   - None: No caching (default)
                   - True: Enable caching with default config
@@ -178,9 +183,12 @@ class AspenClient:
         ]
 
         logger.info(f"Initialized AspenClient for {self.base_url}")
-        logger.debug(
-            f"Config: timeout={timeout}s, verify_ssl={verify_ssl}, datasource={datasource}"
-        )
+        if self._owns_client:
+            http_config = f"timeout={timeout}s, verify_ssl={verify_ssl}"
+        else:
+            # timeout, verify_ssl and auth arguments are not applied to a provided client
+            http_config = f"provided http_client (timeout={self._client.timeout.read}s)"
+        logger.debug(f"Config: {http_config}, datasource={datasource}, retries={retries}")
         if self._cache:
             logger.info(f"Cache enabled: {self._cache.get_stats()}")
 

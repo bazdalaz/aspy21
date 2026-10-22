@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A request that fails with a transient error is now repeated before the error is raised,
   so such failures take longer to surface. Pass `retries=0` for the previous behavior
 
+### Fixed
+- `configure_logging()` only configured the client module's logger. Messages from the
+  readers, retries and cache were printed without the configured format, ignored the
+  configured level (retry warnings showed even at `ERROR`), and their DEBUG/INFO messages
+  never appeared. It now configures the `aspy21` package logger
+- With a custom `http_client`, the debug log showed the `timeout` and `verify_ssl`
+  arguments, which are not applied to such a client. It now logs the client's own timeout
+
 ## [0.0.8] - 2026-10-22
 
 **Cache correctness release** - Cache hits now always return the data the request asked

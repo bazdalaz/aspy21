@@ -215,7 +215,13 @@ class RetryLog(logging.Handler):
 
 def flaky_client(transport: httpx.BaseTransport, **kwargs) -> AspenClient:
     http = httpx.Client(transport=transport, auth=(username, password), timeout=timeout)
-    return AspenClient(base_url, datasource=datasource, http_client=http, **kwargs)
+    return AspenClient(
+        base_url,
+        datasource=datasource,
+        http_client=http,
+        server_timezone=server_timezone,
+        **kwargs,
+    )
 
 
 def retry_recovers(fail: int, error: str, operation: str) -> str:
