@@ -32,14 +32,17 @@ def _copy_value(value: Any) -> Any:
 class CacheConfig:
     """Configuration for caching behavior.
 
+    Only reads whose end time is more than a minute in the past are cached, and empty
+    results are never cached.
+
     Attributes:
         enabled: Enable/disable caching (default: True)
         max_size: Maximum number of cache entries (default: 1000)
         ttl_search: TTL for search results in seconds (default: 3600 = 1h)
-        ttl_metadata: TTL for tag descriptions in seconds (default: 3600 = 1h)
-        ttl_historical: TTL for historical data in seconds (default: 86400 = 24h)
-        ttl_snapshot: TTL for snapshot data in seconds (default: 60 = 1min)
-        ttl_aggregates: TTL for aggregates in seconds (default: 86400 = 24h)
+        ttl_metadata: Not used; kept for compatibility
+        ttl_historical: TTL for RAW and INT reads in seconds (default: 86400 = 24h)
+        ttl_snapshot: Not used: snapshot reads are not cached; kept for compatibility
+        ttl_aggregates: TTL for AVG, MIN, MAX and RNG reads in seconds (default: 86400 = 24h)
     """
 
     enabled: bool = True

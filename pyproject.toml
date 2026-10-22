@@ -67,6 +67,9 @@ Issues = "https://github.com/bazdalaz/aspy21/issues"
 where = ["src"]
 include = ["aspy21*"]
 
+[tool.setuptools.package-data]
+aspy21 = ["py.typed"]  # PEP 561: the package ships type hints
+
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
@@ -109,7 +112,7 @@ exclude_lines = [
 ]
 
 [tool.pyright]
-include = ["src"]
+include = ["src", "tests/typing"]
 exclude = ["**/__pycache__", ".venv", "build", "dist", "scripts"]
 pythonVersion = "3.9"
 typeCheckingMode = "standard"
