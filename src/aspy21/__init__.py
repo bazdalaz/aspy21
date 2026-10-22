@@ -7,7 +7,7 @@ with pandas DataFrame output and flexible batching.
 
 from .cache import AspenCache, CacheConfig
 from .client import AspenClient, configure_logging
-from .errors import AspenSqlError
+from .errors import AspenBrowseError, AspenError, AspenSqlError
 from .models import IncludeFields, OutputFormat, ReaderType
 
 try:
@@ -17,8 +17,10 @@ except ImportError:
     __version__ = "0.0.0.dev0"
 
 __all__ = [
+    "AspenBrowseError",
     "AspenCache",
     "AspenClient",
+    "AspenError",
     "AspenSqlError",
     "CacheConfig",
     "IncludeFields",

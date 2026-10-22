@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Errors reported by the Browse endpoint (search by tag name only) raise the new
+  `AspenBrowseError` instead of a plain `ValueError`. Both it and `AspenSqlError` derive
+  from the new `AspenError`, which derives from `ValueError`, so existing `ValueError` and
+  `AspenSqlError` handlers keep working. Catch `AspenError` for errors from either endpoint
+- A Browse response with an unexpected structure, or one that is not JSON, now raises
+  `AspenBrowseError`. Previously an unexpected structure returned `[]`, reported as "no
+  tags found"
+
 ### Fixed
 - JSON output (the default) dropped every value stored as an integer, so integer-valued
   tags returned no data. Integer and status values are now returned, and values are plain

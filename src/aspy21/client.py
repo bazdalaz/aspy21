@@ -11,7 +11,7 @@ import httpx
 import pandas as pd
 
 from .cache import AspenCache, CacheConfig
-from .errors import raise_for_sql_error
+from .errors import AspenBrowseError, raise_for_sql_error
 from .models import IncludeFields, OutputFormat, ReaderType
 from .query_builder import SqlSearchQueryBuilder
 from .retry import send
@@ -477,7 +477,7 @@ class AspenClient:
 
         Raises:
             ValueError: If tags is empty or datasource is not set
-            AspenSqlError: If IP.21 rejects the query (a ValueError subclass)
+            AspenSqlError: If IP.21 rejects the query (an AspenError, which is a ValueError)
             httpx.HTTPStatusError: For an HTTP error response, after any retries
             httpx.RequestError: For a connection failure or timeout, after any retries
 
@@ -872,8 +872,9 @@ class AspenClient:
             - An empty list or DataFrame when no tags match
 
         Raises:
-            ValueError: If datasource is not configured, or the Browse endpoint (tag-only
-                search) reports an error
+            ValueError: If datasource is not configured
+            AspenBrowseError: If the Browse endpoint (tag-only search) reports an error or
+                returns an unexpected response (a ValueError subclass)
             AspenSqlError: If IP.21 reports an error for a description search or the read
             httpx.HTTPStatusError: For an HTTP error response, after any retries
             httpx.RequestError: For a connection failure or timeout, after any retries
@@ -969,7 +970,11 @@ class AspenClient:
                 response = send(self._client, "GET", browse_url, retries=self.retries)
                 logger.debug(f"Response status: {response.status_code}")
 
-                data = response.json()
+                try:
+                    data = response.json()
+                except ValueError as e:
+                    message = f"Browse response is not JSON: {response.text[:200]!r}"
+                    raise AspenBrowseError(message) from e
 
                 # Check for API error response
                 if "data" in data and isinstance(data["data"], dict):
@@ -980,8 +985,7 @@ class AspenClient:
                         result = data_obj["result"]
                         if isinstance(result, dict) and result.get("er", 0) != 0:
                             error_msg = result.get("es", "Unknown error")
-                            logger.error(f"API error from Browse endpoint: {error_msg}")
-                            raise ValueError(f"Browse API error: {error_msg}")
+                            raise AspenBrowseError(f"Browse API error: {error_msg}")
 
                     # Check if tags key exists
                     if "tags" not in data_obj:
@@ -989,9 +993,13 @@ class AspenClient:
                         tags_data = []
                     else:
                         tags_data = data_obj["tags"]
+                        if not isinstance(tags_data, list):
+                            raise AspenBrowseError(
+                                f"Unexpected Browse response: 'tags' is {type(tags_data).__name__}"
+                            )
                 else:
-                    logger.error(f"Unexpected response structure: {data}")
-                    return []
+                    # Not an empty result: reporting "no tags" would hide a broken response
+                    raise AspenBrowseError(f"Unexpected Browse response: {str(data)[:200]}")
 
                 for tag_entry in tags_data:
                     tag_name = tag_entry.get("t", "")

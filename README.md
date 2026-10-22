@@ -634,7 +634,8 @@ Type checkers and editors infer the exact type from `output`: `pd.DataFrame` for
 - If `output=OutputFormat.JSON`: List of dictionaries with `timestamp`, `tag`, `value`, and optional `description`/`status` fields.
 
 **Raises**: `ValueError` (no tags, or no `datasource`), `AspenSqlError` (IP.21 rejected the
-query), `httpx.HTTPStatusError` and `httpx.RequestError` (after any retries).
+query), `httpx.HTTPStatusError` and `httpx.RequestError` (after any retries). See
+[Error Handling](#error-handling).
 
 **Examples**:
 ```python
@@ -907,8 +908,18 @@ Retries apply to every request, including those sent through a custom `http_clie
 
 ## Error Handling
 
+IP.21 reports most errors with HTTP 200 and the error in the response body. These are
+raised as `AspenError`:
+
+- `AspenSqlError` - the SQL endpoint rejected a query (reads, search by description)
+- `AspenBrowseError` - the Browse endpoint (search by tag name) reported an error or
+  returned a response that could not be read
+
+`AspenError` is a subclass of `ValueError`. Invalid arguments, such as an empty tag list
+or a client without `datasource`, raise a plain `ValueError`.
+
 ```python
-from aspy21 import AspenClient, AspenSqlError, OutputFormat
+from aspy21 import AspenClient, AspenError, OutputFormat
 import httpx
 
 try:
@@ -923,10 +934,10 @@ try:
             end="2025-06-20 09:00:00",
             output=OutputFormat.DATAFRAME,
         )
-except AspenSqlError as e:
-    print(f"IP.21 rejected the query: {e}")  # Returned by the server with HTTP 200
+except AspenError as e:
+    print(f"IP.21 reported an error: {e}")  # Returned by the server with HTTP 200
 except ValueError as e:
-    print(f"Invalid request: {e}")  # e.g. no datasource; AspenSqlError is a subclass
+    print(f"Invalid request: {e}")  # e.g. no datasource
 except httpx.HTTPStatusError as e:
     print(f"HTTP error: {e.response.status_code}")
 except httpx.RequestError as e:

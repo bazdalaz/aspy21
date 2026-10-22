@@ -3,10 +3,23 @@
 from __future__ import annotations
 
 
-class AspenSqlError(ValueError):
-    """Raised when the IP.21 SQL endpoint reports an error.
+class AspenError(ValueError):
+    """Raised when IP.21 reports an error in a response body.
 
-    IP.21 returns SQL errors with HTTP 200, so they are detected from the response body.
+    IP.21 reports most errors with HTTP 200, so they are detected from the response body.
+    Catch this class to handle errors from every endpoint. It is a ValueError subclass,
+    so existing ValueError handlers keep working.
+    """
+
+
+class AspenSqlError(AspenError):
+    """Raised when the IP.21 SQL endpoint reports an error (reads, description search)."""
+
+
+class AspenBrowseError(AspenError):
+    """Raised when the IP.21 Browse endpoint (tag name search) reports an error.
+
+    Also raised when a Browse response does not have the expected structure.
     """
 
 
