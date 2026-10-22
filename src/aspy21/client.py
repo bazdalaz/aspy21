@@ -467,7 +467,10 @@ class AspenClient:
                 - STATUS: Include status field
                 - DESCRIPTION: Include description field
                 - ALL: Include both status and description
-            limit: Maximum number of rows to return per tag (default: 100000)
+            limit: Maximum number of rows to return per tag (default: 100000). A tag that
+                reaches it logs a warning: its values after the last returned row are not
+                read. For several tags, tags cut short by the shared query are read again
+                one at a time.
             output: Output format (default: JSON)
                 - JSON: Return as list of dictionaries
                 - DATAFRAME: Return as pandas DataFrame

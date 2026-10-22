@@ -284,6 +284,9 @@ df = client.read(
 - Raw history can hold several values of one tag at the same timestamp. Each is kept on
   its own row, so the index of a RAW read can contain a timestamp more than once
 - Tags that returned no data have no column (DataFrame) or no records (JSON)
+- `limit` applies to each tag. All tags are read in one query; if a tag has more than
+  `limit` values in the range, the tags that query cut short are read again one at a time,
+  so each tag gets up to `limit` values. Reads below the limit take a single query
 - JSON values are plain Python `int`, `float` or `str`. In a DataFrame, a tag column with
   gaps holds floats, since pandas needs a float column to hold `NaN`
 
@@ -626,7 +629,7 @@ Type checkers and editors infer the exact type from `output`: `pd.DataFrame` for
 | `interval` | int\|None | None | Seconds between interpolated values (INT), or the length of each aggregate period (AVG, MIN, MAX, RNG) |
 | `read_type` | ReaderType | INT | Data retrieval mode (RAW, INT, SNAPSHOT, AVG, MIN, MAX, RNG) |
 | `include` | IncludeFields | NONE | Which optional fields to include (NONE, STATUS, DESCRIPTION, ALL) |
-| `limit` | int | 100000 | Maximum rows to return per tag |
+| `limit` | int | 100000 | Maximum rows to return per tag. A tag that reaches it logs a warning, since later values in the range are not read |
 | `output` | OutputFormat | JSON | Output format (JSON or DATAFRAME) |
 
 **Returns**:

@@ -74,34 +74,101 @@ class SqlHistoryReader(BaseReader):
         max_rows: int,
         with_description: bool,
     ) -> tuple[list[pd.DataFrame], dict[str, str]]:
-        """Read historical data for all tags using SQL endpoint."""
-        logger.debug(f"Using SQL endpoint for {read_type.value} read")
-        logger.debug(f"Batching {len(tags)} tag(s) in single SQL query")
+        """Read historical data for all tags using SQL endpoint.
 
-        # Multiply max_rows by number of tags to ensure each tag gets fair share
-        # (SQL max_rows applies to total result set, not per tag)
-        batched_max_rows = max_rows * len(tags)
-        if batched_max_rows != max_rows:
-            logger.debug(f"Row limit for {len(tags)} tags: {batched_max_rows} ({max_rows} per tag)")
-
+        All tags are read in one query. The server's row limit applies to the whole
+        result, which it returns grouped by tag, so the query asks for max_rows rows per
+        tag. If the server still returns exactly that many rows, tags late in the result
+        may have been cut short; those with fewer than max_rows rows are read again one
+        at a time.
+        """
         assert start is not None
         assert end is not None
+        logger.debug(f"Using SQL endpoint for {read_type.value} read")
 
-        builder = SqlHistoryQueryBuilder()
-        xml_query = builder.build(
-            tags=tags,  # Pass all tags for batched query
+        def query(query_tags: list[str], row_limit: int) -> list:
+            return self._query(
+                query_tags,
+                start,
+                end,
+                interval,
+                read_type,
+                include_status,
+                row_limit,
+                with_description,
+            )
+
+        batch_limit = max_rows * len(tags)
+        if len(tags) > 1:
+            logger.debug(f"Row limit for {len(tags)} tags: {batch_limit} ({max_rows} per tag)")
+        records = query(tags, batch_limit)
+        capped = len(tags) > 1 and max_rows > 0 and len(records) >= batch_limit
+
+        frames, tag_descriptions = self.parser.parse(
+            records,
+            tags,
+            include_status=include_status,
+            max_rows=max_rows,
+            warn_missing=not capped,
+        )
+
+        if capped:
+            by_tag = {frame.columns[0]: frame for frame in frames}
+            short = [tag for tag in tags if len(by_tag.get(tag, ())) < max_rows]
+            if short:
+                logger.debug(
+                    f"Query returned its row limit ({batch_limit}); "
+                    f"reading {len(short)} tag(s) separately: {short}"
+                )
+            for tag in short:
+                tag_frames, descriptions = self.parser.parse(
+                    query([tag], max_rows),
+                    [tag],
+                    include_status=include_status,
+                    max_rows=max_rows,
+                )
+                by_tag.pop(tag, None)
+                if tag_frames:
+                    by_tag[tag] = tag_frames[0]
+                tag_descriptions.update(descriptions)
+            frames = [by_tag[tag] for tag in tags if tag in by_tag]
+
+        if max_rows > 0:
+            for frame in frames:
+                if len(frame) >= max_rows:
+                    logger.warning(
+                        f"{frame.columns[0]}: returned {max_rows} rows, the row limit; values "
+                        f"after {frame.index[-1]} may be missing (raise limit to read them)"
+                    )
+
+        logger.debug(f"Parsed data for {len(frames)} tag(s)")
+        return frames, tag_descriptions
+
+    def _query(
+        self,
+        tags: list[str],
+        start: str,
+        end: str,
+        interval: int | None,
+        read_type: ReaderType,
+        include_status: bool,
+        row_limit: int,
+        with_description: bool,
+    ) -> list:
+        """Send one history query and return its records ([] for an empty response)."""
+        xml_query = SqlHistoryQueryBuilder().build(
+            tags=tags,
             start=start,
             end=end,
             datasource=self.datasource,
             read_type=read_type,
             interval=interval,
-            max_rows=batched_max_rows,
+            max_rows=row_limit,
             with_description=with_description,
             include_status=include_status,
         )
 
-        sql_url = f"{self.base_url}/SQL"
-        logger.debug(f"POST {sql_url}")
+        logger.debug(f"POST {self.base_url}/SQL")
         logger.debug(f"SQL query XML: {xml_query}")
 
         response = self._post_sql(xml_query)
@@ -117,7 +184,7 @@ class SqlHistoryReader(BaseReader):
                 "SQL endpoint returned empty response "
                 "(possibly unsupported tag type or no data in range)"
             )
-            return [], {}
+            return []
 
         try:
             sql_response = response.json()
@@ -127,17 +194,9 @@ class SqlHistoryReader(BaseReader):
 
         raise_for_sql_error(sql_response)
 
-        logger.debug(f"SQL response type: {type(sql_response)}")
-        response_length = len(sql_response) if isinstance(sql_response, list) else "N/A"
-        logger.debug(f"SQL response length: {response_length}")
-
-        # Parse multi-tag SQL response (response="Record" returns clean JSON array)
-        frames, tag_descriptions = self.parser.parse(
-            sql_response,
-            tags,
-            include_status=include_status,
-            max_rows=max_rows,
-        )
-        logger.debug(f"Parsed data for {len(frames)} tag(s)")
-
-        return frames, tag_descriptions
+        if not isinstance(sql_response, list):
+            # response="Record" returns a list; anything else has no history records
+            logger.warning("No data in SQL response")
+            return []
+        logger.debug(f"SQL response length: {len(sql_response)}")
+        return sql_response

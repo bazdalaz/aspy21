@@ -120,6 +120,7 @@ class SqlHistoryResponseParser(ResponseParser):
         tag_names: list[str],
         include_status: bool,
         max_rows: int,
+        warn_missing: bool = True,
     ) -> tuple[list[pd.DataFrame], dict[str, str]]:
         """Parse SQL history response for multiple tags into separate DataFrames.
 
@@ -128,6 +129,7 @@ class SqlHistoryResponseParser(ResponseParser):
             tag_names: List of tag names to extract
             include_status: Whether to include status column
             max_rows: Maximum rows per tag (0 = unlimited)
+            warn_missing: Log a warning for each tag without data
 
         Returns:
             Tuple of (list of DataFrames, tag descriptions dict)
@@ -157,7 +159,8 @@ class SqlHistoryResponseParser(ResponseParser):
             records = tag_records.get(tag_name, [])
 
             if not records:
-                logger.warning(f"No data in SQL response for tag {tag_name}")
+                if warn_missing:
+                    logger.warning(f"No data in SQL response for tag {tag_name}")
                 continue
 
             # Build DataFrame from records
