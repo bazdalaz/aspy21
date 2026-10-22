@@ -5,9 +5,45 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+
+def _merge_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
+    """Merge per-tag frames on their time index, keeping every row.
+
+    Raw history can hold several values for one tag at the same timestamp. Each frame's
+    rows are numbered within their timestamp, so the n-th value of one tag at a time is
+    aligned with the n-th value of the others and no value is repeated or dropped.
+
+    Args:
+        frames: DataFrames indexed by time, one or more tags each
+
+    Returns:
+        A DataFrame sorted by time, with one row per timestamp and occurrence
+    """
+    numbered = []
+    for frame in frames:
+        occurrence = frame.groupby(level=0).cumcount().to_numpy()
+        index = pd.MultiIndex.from_arrays(
+            [frame.index, occurrence], names=[frame.index.name, "_occurrence"]
+        )
+        numbered.append(frame.set_axis(index, axis=0))
+
+    merged = pd.concat(numbered, axis=1).sort_index()
+    return merged.droplevel("_occurrence")
+
+
+def _python_value(value: object) -> object:
+    """Return a numpy scalar as the equivalent Python value (e.g. numpy.int64 -> int)."""
+    return value.item() if isinstance(value, np.generic) else value
+
+
+def _is_present(value: object) -> bool:
+    """Return True for a scalar value that is not missing (NaN, None, NA, NaT)."""
+    return pd.api.types.is_scalar(value) and not pd.isna(value)  # type: ignore[arg-type]
 
 
 class OutputFormatter(ABC):
@@ -133,40 +169,41 @@ class JsonFormatter(OutputFormatter):
         """
         json_data: list[dict] = []
 
-        for idx, row in df.iterrows():
-            # Iterate through each tag (column) in this row
+        # Read values column by column: iterrows() casts each row to one dtype, which
+        # turns integers into floats when a row also holds a float column
+        tags = [tag for tag in tags if tag in df.columns]
+        values = {tag: df[tag].tolist() for tag in tags}
+        statuses = {}
+        if self.include_status:
+            statuses = {
+                tag: df[f"{tag}_status"].tolist() for tag in tags if f"{tag}_status" in df.columns
+            }
+
+        for position, idx in enumerate(df.index):
+            # idx is pandas Timestamp, which has isoformat method
+            ts = idx.isoformat() if hasattr(idx, "isoformat") else str(idx)
+
             for tag in tags:
-                if tag in row.index:
-                    value = row[tag]
-                    # Skip NaN values - use isinstance check to avoid Series.__bool__ issue
-                    if isinstance(value, (int, float, str)) and pd.notna(value):
-                        # idx is pandas Timestamp, which has isoformat method
-                        ts = (
-                            idx.isoformat()  # type: ignore[union-attr]
-                            if hasattr(idx, "isoformat")
-                            else str(idx)
-                        )
+                value = values[tag][position]
+                if not _is_present(value):
+                    continue
 
-                        record: dict[str, object] = {
-                            "timestamp": ts,
-                            "tag": tag,
-                            "value": value,
-                        }
+                record: dict[str, object] = {
+                    "timestamp": ts,
+                    "tag": tag,
+                    "value": _python_value(value),
+                }
 
-                        # Add optional fields based on configuration
-                        if self.with_description:
-                            record["description"] = tag_descriptions.get(tag, "")
+                # Add optional fields based on configuration
+                if self.with_description:
+                    record["description"] = tag_descriptions.get(tag, "")
 
-                        if self.include_status:
-                            status_col = f"{tag}_status"
-                            if status_col in row.index:
-                                status_value = row.get(status_col)
-                                if isinstance(status_value, (int, float, str)) and pd.notna(
-                                    status_value
-                                ):
-                                    record["status"] = status_value
+                if tag in statuses:
+                    status_value = statuses[tag][position]
+                    if _is_present(status_value):
+                        record["status"] = _python_value(status_value)
 
-                        json_data.append(record)
+                json_data.append(record)
 
         logger.debug(f"Converted to {len(json_data)} JSON records")
         return json_data
@@ -209,8 +246,7 @@ class DataFormatter:
             return pd.DataFrame()
 
         # Common preprocessing: merge frames and sort by time index
-        merged_df = pd.concat(frames, axis=1)
-        merged_df = merged_df.sort_index()
+        merged_df = _merge_frames(frames)
 
         # Select appropriate formatting strategy
         formatter: OutputFormatter

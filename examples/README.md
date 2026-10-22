@@ -146,6 +146,26 @@ python examples/search_and_read.py
 - Different reader types: `RAW`, `INT` (interpolated)
 - Interval-based reads for aggregated/interpolated data
 
+### multi_tag_merge.py
+
+Checks how a read of several tags is merged into one result, and exits with status 1 if
+a check fails.
+
+**Run:**
+```bash
+python examples/multi_tag_merge.py            # live read of the last hour
+python examples/multi_tag_merge.py --hours 24 # longer live read
+```
+
+**What it does:**
+- **Offline** (needs `respx`): mocked responses with tags at different timestamps (gaps),
+  two values of one tag at the same timestamp, and integer values. Checks that values line
+  up on the time index, gaps are NaN, every value is kept once, and JSON values are plain
+  Python types
+- **Live** (needs `ASPEN_BASE_URL` and `ASPEN_TEST_TAGS`): reads raw data for the test tags
+  as a DataFrame and as JSON, reports values, gaps and duplicate timestamps per tag, and
+  checks that both outputs hold the same values
+
 ## Creating Your Own Scripts
 
 ```python
