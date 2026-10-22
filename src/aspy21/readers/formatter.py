@@ -44,7 +44,6 @@ class OutputFormatter(ABC):
         Returns:
             Formatted output (DataFrame or list of dictionaries)
         """
-        pass
 
 
 class DataFrameFormatter(OutputFormatter):

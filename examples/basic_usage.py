@@ -1,6 +1,7 @@
 """Example script testing Basic Auth (works on Linux/Mac/Windows)."""
 
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -33,7 +34,7 @@ if not all([base_url, username, password]):
     print("ERROR: Missing required environment variables!")
     print("Required: ASPEN_BASE_URL, ASPEN_USERNAME, ASPEN_PASSWORD")
     print("Please create .env file from .env.example")
-    exit(1)
+    sys.exit(1)
 
 print(test_tags)
 

@@ -61,7 +61,8 @@ def to_server_time(value: str | datetime, server_tz: str | tzinfo | None) -> pd.
     """
     dt = pd.Timestamp(value)
     if not isinstance(dt, pd.Timestamp):
-        raise ValueError(f"Invalid timestamp: {value!r}")
+        # NaT: an invalid value rather than a wrong type, so ValueError
+        raise ValueError(f"Invalid timestamp: {value!r}")  # noqa: TRY004
     if dt.tzinfo is None:
         return dt
     if server_tz is None:
@@ -99,7 +100,7 @@ def localize_server_index(df: pd.DataFrame, server_tz: str | tzinfo | None) -> p
     if server_tz is not None:
         try:
             index = index.tz_localize(server_tz, ambiguous="infer", nonexistent="shift_forward")
-        except Exception:
+        except Exception:  # noqa: BLE001 - pandas 2 raises pytz errors, not ValueError
             # Inference fails e.g. for a single repeated time; the zone was validated by
             # check_timezone, so any other error is raised again by the call below
             index = index.tz_localize(

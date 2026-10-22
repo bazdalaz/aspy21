@@ -36,8 +36,6 @@ class ResponseParser(ABC):  # noqa: B024
     handles fundamentally different API response structures.
     """
 
-    pass
-
 
 class SqlSnapshotResponseParser(ResponseParser):
     """Parser for SQL snapshot responses.

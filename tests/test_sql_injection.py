@@ -165,7 +165,11 @@ def history_timestamp(field: str):
         args[field] = value
         return sql_of(
             SqlHistoryQueryBuilder().build(
-                tags="T1", datasource="IP21", read_type=ReaderType.RAW, **args
+                tags="T1",
+                datasource="IP21",
+                read_type=ReaderType.RAW,
+                start=args["start"],
+                end=args["end"],
             )
         )
 

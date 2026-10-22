@@ -1,6 +1,7 @@
 """Example script demonstrating how to search for tags and read their data."""
 
 import os
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -31,7 +32,7 @@ if not all([base_url, username, password, datasource]):
     print("ERROR: Missing required environment variables!")
     print("Required: ASPEN_BASE_URL, ASPEN_USERNAME, ASPEN_PASSWORD, ASPEN_DATASOURCE")
     print("Please create .env file from .env.example")
-    exit(1)
+    sys.exit(1)
 
 # Type narrowing: assert non-None after validation
 assert base_url is not None

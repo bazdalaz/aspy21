@@ -17,13 +17,13 @@ except ImportError:
     __version__ = "0.0.0.dev0"
 
 __all__ = [
-    "AspenClient",
     "AspenCache",
+    "AspenClient",
     "AspenSqlError",
     "CacheConfig",
-    "ReaderType",
     "IncludeFields",
     "OutputFormat",
-    "configure_logging",
+    "ReaderType",
     "__version__",
+    "configure_logging",
 ]

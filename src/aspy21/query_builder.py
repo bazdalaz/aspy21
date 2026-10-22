@@ -88,8 +88,6 @@ class QueryBuilder(ABC):  # noqa: B024
     handles fundamentally different query requirements.
     """
 
-    pass
-
 
 class SqlHistoryQueryBuilder(QueryBuilder):
     """Query builder for SQL history endpoint (batched multi-tag queries)."""
