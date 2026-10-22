@@ -12,7 +12,7 @@ Usage:
 
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -119,6 +119,32 @@ def sql_error_detected(client: AspenClient, mode: str) -> str:
     raise AssertionError(f"Error response not recognized. Raw response: {text[:500]}")
 
 
+def timezone_diagnostics(client: AspenClient) -> None:
+    """Print raw server timestamps next to this machine's clock (read-only, never fails)."""
+    now = datetime.now().astimezone()
+    print("Timezone diagnostics")
+    print(f"  local now: {now.isoformat()} ({now.tzname()})")
+    print(f"  utc now:   {now.astimezone(timezone.utc).isoformat()}")
+    w_start = query_builder.sql_timestamp(str(start))
+    w_end = query_builder.sql_timestamp(str(start + timedelta(minutes=10)))
+    window = f"ts between '{w_start}' and '{w_end}'"
+    name = query_builder.sql_literal(tag)
+    queries = {
+        "history ts": f"Select ts, name, value from history(80) where name={name} "
+        f"and {window} and request=1 and period=3000",
+        "input time": f"Select name, name->ip_input_time t, name->ip_input_value v "
+        f"from all_records where name={name}",
+        "db time": f"Select name, getdbtime t from all_records where name={name}",
+    }
+    print(f"  requested window: {w_start} to {w_end} (sent as local time)")
+    for label, sql in queries.items():
+        try:
+            print(f"  {label}: {raw_sql(client, sql)[:400]}")
+        except Exception as e:
+            print(f"  {label}: {type(e).__name__}: {e}")
+    print()
+
+
 def expect_empty(result: object) -> object:
     if result:
         raise AssertionError(f"Injection returned data: {result}")
@@ -132,6 +158,7 @@ with AspenClient(
     timeout=timeout,
     verify_ssl=verify_ssl,
 ) as c:
+    timezone_diagnostics(c)
     checks = {
         "escaped quote round-trip (escaping)": lambda: round_trip(c, "O'Brien"),
         "backslash-quote round-trip (escaping)": lambda: round_trip(c, "x\\'y\\"),
