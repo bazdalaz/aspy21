@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-10-22
+
+**Error handling release** - SQL errors are now raised instead of being returned as empty
+data, and aggregate reads send timestamps in a format IP.21 accepts.
+
+### Changed
+- SQL errors reported by the server now raise `AspenSqlError` (a `ValueError` subclass).
+  Previously most were logged and the read or search returned no data
+
 ### Fixed
 - SQL errors returned by IP.21 with HTTP 200 (`AtPD_ErrorCode` records, or `result.er` in
   search responses) are now raised as `AspenSqlError` instead of being reported as "no data"
@@ -179,6 +188,8 @@ pip install aspy21
 
 This is the first stable release. The API is considered stable and follows semantic versioning. Breaking changes will only occur in major version updates (e.g., 1.0.0).
 
-[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/bazdalaz/aspy21/compare/v0.0.5...v0.0.6
+[0.0.5]: https://github.com/bazdalaz/aspy21/compare/v0.0.2...v0.0.5
 [0.0.2]: https://github.com/bazdalaz/aspy21/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/bazdalaz/aspy21/releases/tag/v0.0.1
