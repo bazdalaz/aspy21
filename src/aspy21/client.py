@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, overload
 
 import httpx
 import pandas as pd
@@ -82,12 +82,14 @@ class AspenClient:
         """Initialize the Aspen client.
 
         Args:
-            base_url: Base URL of the Aspen ProcessData REST API
+            base_url: URL of the ProcessData REST API, ending in AtProcessDataREST.dll,
+                e.g. "http://server/ProcessData/AtProcessDataREST.dll"
             auth: Authentication as (username, password) tuple or httpx Auth object.
                   If None, no authentication is used.
             timeout: Request timeout in seconds (default: 30.0)
             verify_ssl: Whether to verify SSL certificates (default: True)
-            datasource: Aspen datasource name. If None, uses server default.
+            datasource: IP.21 datasource name, e.g. "IP21". Required: read() and
+                search() raise ValueError without it.
             http_client: Optional httpx.Client instance. If None, creates a new client.
                         Useful for dependency injection and testing. When given,
                         timeout, verify_ssl and auth are not applied; configure them
@@ -109,31 +111,34 @@ class AspenClient:
                 backoff (0.5s, 1s, ... up to 8s) or the server's Retry-After. Read
                 timeouts, other HTTP errors and SQL errors are not retried.
 
+        Raises:
+            ValueError: If retries is negative or server_timezone is not a known zone
+            TypeError: If cache is not None, a bool, a CacheConfig or an AspenCache
+
         Example:
             Using context manager with authentication:
                 >>> with AspenClient(
-                ...     base_url="https://aspen.example.com/ProcessData",
-                ...     auth=("user", "pass")
-                ... ) as client:
-                ...     df = client.read(["TAG1"], "2025-01-01", "2025-01-02")
-
-            Without authentication:
-                >>> with AspenClient(base_url="http://aspen.example.com/ProcessData") as client:
-                ...     df = client.read(["TAG1"], "2025-01-01", "2025-01-02")
-
-            With datasource for search:
-                >>> with AspenClient(
-                ...     base_url="https://aspen.example.com/ProcessData",
+                ...     "http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
                 ...     auth=("user", "pass"),
-                ...     datasource="IP21"
+                ...     datasource="IP21",
                 ... ) as client:
-                ...     tags = client.search(tag="TEMP*")
+                ...     data = client.read(
+                ...         ["TAG1"], start="2025-01-01 00:00:00", end="2025-01-02 00:00:00"
+                ...     )
 
-            With custom HTTP client (for testing or custom configuration):
-                >>> client = httpx.Client(timeout=60.0, verify=False)
+            Searching for tags:
+                >>> with AspenClient(
+                ...     "http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
+                ...     datasource="IP21",
+                ... ) as client:
+                ...     tags = client.search("TEMP*")
+
+            With custom HTTP client (timeout, verify_ssl and auth are set on it):
+                >>> http = httpx.Client(timeout=60.0, verify=False, auth=("user", "pass"))
                 >>> aspen = AspenClient(
-                ...     base_url="https://aspen.example.com/ProcessData",
-                ...     http_client=client
+                ...     "http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
+                ...     datasource="IP21",
+                ...     http_client=http,
                 ... )
         """
         self.base_url = base_url.rstrip("/")
@@ -369,6 +374,48 @@ class AspenClient:
 
         return self._cache.invalidate_where(matches)
 
+    @overload
+    def read(
+        self,
+        tags: list[str],
+        *,
+        start: str | None = None,
+        end: str | None = None,
+        interval: int | None = None,
+        read_type: ReaderType = ReaderType.INT,
+        include: IncludeFields = IncludeFields.NONE,
+        limit: int = 100_000,
+        output: Literal[OutputFormat.DATAFRAME],
+    ) -> pd.DataFrame: ...
+
+    @overload
+    def read(
+        self,
+        tags: list[str],
+        *,
+        start: str | None = None,
+        end: str | None = None,
+        interval: int | None = None,
+        read_type: ReaderType = ReaderType.INT,
+        include: IncludeFields = IncludeFields.NONE,
+        limit: int = 100_000,
+        output: Literal[OutputFormat.JSON] = OutputFormat.JSON,
+    ) -> list[dict]: ...
+
+    @overload
+    def read(
+        self,
+        tags: list[str],
+        *,
+        start: str | None = None,
+        end: str | None = None,
+        interval: int | None = None,
+        read_type: ReaderType = ReaderType.INT,
+        include: IncludeFields = IncludeFields.NONE,
+        limit: int = 100_000,
+        output: OutputFormat = OutputFormat.JSON,
+    ) -> pd.DataFrame | list[dict]: ...
+
     def read(
         self,
         tags: list[str],
@@ -385,14 +432,20 @@ class AspenClient:
 
         Args:
             tags: List of tag names to retrieve
-            start: Start timestamp (ISO format or compatible string). If omitted, defaults to
-                SNAPSHOT read. Naive values are server local time; timezone-aware values
-                are converted (see server_timezone).
-            end: End timestamp (ISO format or compatible string). If omitted, defaults to
-                SNAPSHOT read.
-            interval: Optional interval in seconds for aggregated data (AVG reads).
-                IP.21 stamps each aggregate at the end of its period.
-            read_type: Type of data retrieval (RAW, INT, SNAPSHOT, AVG) (default: INT)
+            start: Start timestamp (ISO format or compatible string). If start and end are
+                both omitted, the current values are read (SNAPSHOT). Naive values are server
+                local time; timezone-aware values are converted (see server_timezone).
+            end: End timestamp (ISO format or compatible string). Defaults to the current
+                time when only start is given.
+            interval: Interval in seconds. For INT reads, the spacing of interpolated values;
+                for AVG, MIN, MAX and RNG, the length of each aggregate period (without it,
+                one value covers start to end). IP.21 stamps each aggregate at the end of
+                its period. Leave it unset for RAW and SNAPSHOT reads.
+            read_type: Type of data retrieval (default: INT)
+                - RAW: Values as stored in the historian
+                - INT: Interpolated values
+                - SNAPSHOT: Current values (also used when start and end are omitted)
+                - AVG, MIN, MAX, RNG: Aggregates (average, minimum, maximum, max - min)
             include: Field inclusion options (default: NONE)
                 - NONE: Include only timestamp and value
                 - STATUS: Include status field
@@ -404,35 +457,51 @@ class AspenClient:
                 - DATAFRAME: Return as pandas DataFrame
 
         Returns:
-            If output=DATAFRAME: pandas DataFrame with time index and columns for each tag.
-                                 If include=STATUS or ALL, includes a 'status' column.
-            If output=JSON: List of dictionaries, each containing:
-                           - timestamp: ISO format timestamp string
-                           - tag: Tag name
-                           - description: Tag description (when include=DESCRIPTION or ALL)
-                           - value: Tag value
-                           - status: Status code (when include=STATUS or ALL)
+            Timestamps are naive server-local times, or timezone-aware when server_timezone
+            is set.
+
+            If output=DATAFRAME: pandas DataFrame indexed by time ("time"), sorted, with one
+                column per tag that returned data. Tags without a value at a timestamp are
+                NaN there. With include=STATUS or ALL, a "<tag>_status" column follows each
+                tag; with DESCRIPTION or ALL, a "<tag>_description" column. When a tag has
+                several values at one timestamp (RAW reads), each gets its own row, so the
+                index can repeat. With DESCRIPTION or ALL, df.attrs["tag_descriptions"]
+                maps tag names to descriptions.
+            If output=JSON: List of dictionaries, one per value, sorted by time:
+                - timestamp: ISO format timestamp string
+                - tag: Tag name
+                - value: Tag value (int, float or str)
+                - description: Tag description (when include=DESCRIPTION or ALL)
+                - status: Status code (when include=STATUS or ALL)
+            An empty DataFrame or list when no tag returned data.
+
+        Raises:
+            ValueError: If tags is empty or datasource is not set
+            AspenSqlError: If IP.21 rejects the query (a ValueError subclass)
+            httpx.HTTPStatusError: For an HTTP error response, after any retries
+            httpx.RequestError: For a connection failure or timeout, after any retries
 
         Example:
             >>> # JSON output (default)
-            >>> client = AspenClient("https://aspen.example.com/ProcessData")
             >>> data = client.read(
             ...     ["ATI111"],
             ...     start="2025-01-01 00:00:00",
-            ...     end="2025-01-01 01:00:00"
+            ...     end="2025-01-01 01:00:00",
             ... )
             >>> # Returns: [
             >>> #   {"timestamp": "2025-01-01T00:00:00", "tag": "ATI111", "value": 25.5},
             >>> #   ...
             >>> # ]
 
-            >>> # DataFrame output with descriptions
+            >>> # 10-minute averages as a DataFrame with descriptions
             >>> df = client.read(
             ...     ["ATI111", "AP101.PV"],
             ...     start="2025-01-01 00:00:00",
             ...     end="2025-01-01 01:00:00",
+            ...     interval=600,
+            ...     read_type=ReaderType.AVG,
+            ...     include=IncludeFields.DESCRIPTION,
             ...     output=OutputFormat.DATAFRAME,
-            ...     include=IncludeFields.DESCRIPTION
             ... )
         """
         from .readers import DataFormatter
@@ -659,6 +728,86 @@ class AspenClient:
             logger.error(f"Error in SQL search: {type(e).__name__}: {e}")
             raise
 
+    @overload
+    def search(
+        self,
+        tag: str = "*",
+        *,
+        description: str | None = None,
+        case_sensitive: bool = False,
+        limit: int = 10_000,
+        start: str,
+        end: str | None = None,
+        interval: int | None = None,
+        read_type: ReaderType = ReaderType.INT,
+        include: IncludeFields = IncludeFields.NONE,
+        output: Literal[OutputFormat.DATAFRAME],
+    ) -> pd.DataFrame: ...
+
+    @overload
+    def search(
+        self,
+        tag: str = "*",
+        *,
+        description: str | None = None,
+        case_sensitive: bool = False,
+        limit: int = 10_000,
+        start: str,
+        end: str | None = None,
+        interval: int | None = None,
+        read_type: ReaderType = ReaderType.INT,
+        include: IncludeFields = IncludeFields.NONE,
+        output: Literal[OutputFormat.JSON] = OutputFormat.JSON,
+    ) -> list[dict]: ...
+
+    @overload
+    def search(
+        self,
+        tag: str = "*",
+        *,
+        description: str | None = None,
+        case_sensitive: bool = False,
+        limit: int = 10_000,
+        start: None = None,
+        end: str | None = None,
+        interval: int | None = None,
+        read_type: ReaderType = ReaderType.INT,
+        include: Literal[IncludeFields.NONE, IncludeFields.STATUS] = IncludeFields.NONE,
+        output: OutputFormat = OutputFormat.JSON,
+    ) -> list[str]: ...
+
+    @overload
+    def search(
+        self,
+        tag: str = "*",
+        *,
+        description: str | None = None,
+        case_sensitive: bool = False,
+        limit: int = 10_000,
+        start: None = None,
+        end: str | None = None,
+        interval: int | None = None,
+        read_type: ReaderType = ReaderType.INT,
+        include: Literal[IncludeFields.DESCRIPTION, IncludeFields.ALL],
+        output: OutputFormat = OutputFormat.JSON,
+    ) -> list[dict]: ...
+
+    @overload
+    def search(
+        self,
+        tag: str = "*",
+        *,
+        description: str | None = None,
+        case_sensitive: bool = False,
+        limit: int = 10_000,
+        start: str | None = None,
+        end: str | None = None,
+        interval: int | None = None,
+        read_type: ReaderType = ReaderType.INT,
+        include: IncludeFields = IncludeFields.NONE,
+        output: OutputFormat = OutputFormat.JSON,
+    ) -> pd.DataFrame | list[dict] | list[str]: ...
+
     def search(
         self,
         tag: str = "*",
@@ -703,14 +852,12 @@ class AspenClient:
                    In hybrid mode: max number of rows per tag (default: 10000).
             start: Start timestamp for data retrieval. When provided, triggers hybrid mode.
             end: End timestamp for data retrieval. If omitted, defaults to current time.
-            interval: Optional interval in seconds for aggregated data (AVG reads).
-            read_type: Type of data retrieval (RAW, INT, SNAPSHOT, AVG) (default: INT).
+            interval: Interval in seconds for INT and aggregate reads (see read()).
+            read_type: Type of data retrieval in hybrid mode (default: INT); see read().
             include: Field inclusion options (default: NONE).
-                    - NONE: Include only timestamp and value
-                    - STATUS: Include status field
-                    - DESCRIPTION: Include description field
-                    - ALL: Include both status and description
-            output: Output format (default: JSON).
+                    In search-only mode, DESCRIPTION or ALL returns descriptions with
+                    the tag names. In hybrid mode, the fields added to the data (see read()).
+            output: Output format in hybrid mode (default: JSON).
                    - JSON: Return as list of dictionaries
                    - DATAFRAME: Return as pandas DataFrame
 
@@ -722,9 +869,14 @@ class AspenClient:
             **Hybrid mode (with start):**
             - If output=JSON: List of dictionaries with timestamp, tag, value, and optional fields
             - If output=DATAFRAME: pandas DataFrame with time index and tag columns
+            - An empty list or DataFrame when no tags match
 
         Raises:
-            ValueError: If datasource is not configured
+            ValueError: If datasource is not configured, or the Browse endpoint (tag-only
+                search) reports an error
+            AspenSqlError: If IP.21 reports an error for a description search or the read
+            httpx.HTTPStatusError: For an HTTP error response, after any retries
+            httpx.RequestError: For a connection failure or timeout, after any retries
 
         Example:
             >>> # Search-only: Find temperature tags (returns tag names)

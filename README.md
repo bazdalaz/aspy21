@@ -30,7 +30,8 @@
 - Enum-based parameters for cleaner, type-safe API
 - Configurable row limits and query parameters
 - Automatic retries of transient failures (connection errors, HTTP 429/502/503/504)
-- Type-annotated and fully tested (88% coverage)
+- Fully type-annotated: editors and type checkers know whether a call returns a
+  DataFrame, a list of records or a list of tag names
 
 ### Use Cases
 
@@ -67,16 +68,15 @@ from aspy21 import AspenClient, OutputFormat, ReaderType
 
 # Initialize client using context manager (recommended)
 with AspenClient(
-    base_url="https://aspen.myplant.local/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
-    datasource="IP21"  # Required for historical reads
+    datasource="IP21",  # Required for reads and searches
 ) as client:
     # Read historical data
     df = client.read(
         ["ATI111", "AP101.PV"],
         start="2025-06-20 08:00:00",
         end="2025-06-20 09:00:00",
-        interval=600,
         read_type=ReaderType.RAW,
         output=OutputFormat.DATAFRAME,
     )
@@ -84,6 +84,10 @@ with AspenClient(
     print(df)
     # Connection automatically closed
 ```
+
+`base_url` is the address of the ProcessData REST API, including `AtProcessDataREST.dll`:
+`http://<server>/ProcessData/AtProcessDataREST.dll`. `datasource` is the IP.21 data
+source name; reads and searches raise `ValueError` without it.
 
 ---
 
@@ -99,7 +103,7 @@ The aggregates reader types (AVG, MIN, MAX, RNG) query the IP.21 aggregates tabl
 from aspy21 import AspenClient, ReaderType, OutputFormat
 
 with AspenClient(
-    base_url="https://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
     datasource="IP21"
 ) as client:
@@ -121,7 +125,7 @@ with AspenClient(
 ```python
 # Get a single average value over 24 hours (no interval)
 with AspenClient(
-    base_url="https://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
     datasource="IP21"
 ) as client:
@@ -141,7 +145,7 @@ with AspenClient(
 ```python
 # Find daily min/max temperatures
 with AspenClient(
-    base_url="https://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
     datasource="IP21"
 ) as client:
@@ -174,7 +178,7 @@ with AspenClient(
 ```python
 # Calculate hourly temperature ranges (variability)
 with AspenClient(
-    base_url="https://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
     datasource="IP21"
 ) as client:
@@ -195,7 +199,7 @@ with AspenClient(
 ```python
 # Get comprehensive statistics for a process variable
 with AspenClient(
-    base_url="https://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
     datasource="IP21"
 ) as client:
@@ -229,7 +233,7 @@ with AspenClient(
 ```python
 # Raw historical data (as stored in historian)
 with AspenClient(
-    base_url="https://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
     datasource="IP21"
 ) as client:
@@ -254,12 +258,41 @@ with AspenClient(
     print(f"Interpolated data points: {len(int_df)}")
 ```
 
+### Reading Several Tags
+
+Values of all tags are merged on one time index, sorted by time. A tag that has no value
+at a timestamp is `NaN` there in a DataFrame, and has no record in JSON output:
+
+```python
+df = client.read(
+    ["FLOW_101", "LEVEL_205"],
+    start="2025-01-15 08:00:00",
+    end="2025-01-15 09:00:00",
+    read_type=ReaderType.RAW,
+    include=IncludeFields.STATUS,
+    output=OutputFormat.DATAFRAME,
+)
+#                      FLOW_101  FLOW_101_status  LEVEL_205  LEVEL_205_status
+# time
+# 2025-01-15 08:00:00      12.5              0.0        NaN               NaN
+# 2025-01-15 08:00:30       NaN              NaN       40.1               0.0
+# 2025-01-15 08:01:00      12.7              0.0       40.3               0.0
+```
+
+- Status and description columns are named `<tag>_status` and `<tag>_description` and
+  follow their tag's column
+- Raw history can hold several values of one tag at the same timestamp. Each is kept on
+  its own row, so the index of a RAW read can contain a timestamp more than once
+- Tags that returned no data have no column (DataFrame) or no records (JSON)
+- JSON values are plain Python `int`, `float` or `str`. In a DataFrame, a tag column with
+  gaps holds floats, since pandas needs a float column to hold `NaN`
+
 ### Snapshot (Current Values)
 
 ```python
 # Get current values for multiple tags
 with AspenClient(
-    base_url="https://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
     datasource="IP21"
 ) as client:
@@ -284,7 +317,7 @@ with AspenClient(
 ```python
 # Search for tags and read their data in one call
 with AspenClient(
-    base_url="https://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
     datasource="IP21"
 ) as client:
@@ -307,7 +340,7 @@ with AspenClient(
 from aspy21 import IncludeFields
 
 with AspenClient(
-    base_url="https://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
     datasource="IP21"
 ) as client:
@@ -354,7 +387,7 @@ with AspenClient(
 
 ```python
 with AspenClient(
-    base_url="https://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
     datasource="IP21"  # Required for historical reads
 ) as client:
@@ -368,7 +401,7 @@ For public or internal endpoints:
 
 ```python
 with AspenClient(
-    base_url="http://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     datasource="IP21"  # Required for historical reads
 ) as client:
     # Your code here
@@ -381,15 +414,18 @@ with AspenClient(
 
 ### Overview
 
-Built-in caching layer reduces API load by 60-80% and improves performance by 10-100x for repeated queries. The cache uses TTL (Time-To-Live) + LRU (Least Recently Used) eviction and is fully thread-safe.
+An optional in-memory cache returns repeated reads of past data without a server
+round trip. It uses TTL (Time-To-Live) expiry with eviction of the oldest entries, and is
+thread-safe. It is off by default.
 
-### Smart Caching Strategy
+### What Is Cached
 
-- **Historical data** (past data): Long TTL (24 hours) - this data doesn't change
-- **Search results**: Medium TTL (1 hour) - metadata changes infrequently
-- **Aggregates**: Long TTL (24 hours) - computed values are stable
-- **Snapshots**: Short TTL (1 minute) - current values change frequently
-- **Current data**: Not cached with long TTL - data is volatile
+- **Historical reads** (RAW, INT) whose end time is more than a minute in the past:
+  24 hours (`ttl_historical`) - this data doesn't change
+- **Aggregate reads** (AVG, MIN, MAX, RNG) of past periods: 24 hours (`ttl_aggregates`)
+- **Search results**: 1 hour (`ttl_search`) - tag lists change infrequently
+- **Not cached**: snapshot reads, reads ending in the last minute or in the future, empty
+  results, and failed requests
 
 ### Enabling Cache
 
@@ -400,9 +436,10 @@ from aspy21 import AspenClient
 
 # Enable caching with defaults
 with AspenClient(
-    base_url="https://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
-    cache=True  # Enable with default settings
+    datasource="IP21",
+    cache=True,  # Enable with default settings
 ) as client:
     # First read hits API
     data1 = client.read(["TAG1"], start="2025-01-01 08:00:00", end="2025-01-01 09:00:00")
@@ -424,16 +461,16 @@ from aspy21 import AspenClient, CacheConfig
 config = CacheConfig(
     enabled=True,
     max_size=500,           # Limit to 500 cached entries
-    ttl_historical=7200,    # 2 hours for historical data
+    ttl_historical=7200,    # 2 hours for RAW and INT reads
     ttl_search=1800,        # 30 minutes for search results
-    ttl_snapshot=30,        # 30 seconds for current values
     ttl_aggregates=7200,    # 2 hours for aggregates
 )
 
 with AspenClient(
-    base_url="https://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
-    cache=config  # Use custom configuration
+    datasource="IP21",
+    cache=config,  # Use custom configuration
 ) as client:
     # Your code here
     pass
@@ -448,9 +485,10 @@ from aspy21 import AspenClient, AspenCache
 shared_cache = AspenCache()
 
 # Use same cache for multiple clients
-with AspenClient(base_url=url1, cache=shared_cache) as client1:
-    with AspenClient(base_url=url2, cache=shared_cache) as client2:
-        # Both clients share the same cache
+with AspenClient(base_url=url1, datasource="IP21", cache=shared_cache) as client1:
+    with AspenClient(base_url=url2, datasource="IP21", cache=shared_cache) as client2:
+        # Both clients share the same cache; their entries are kept apart by server and
+        # datasource
         client1.read([...])
         client2.read([...])
 
@@ -495,51 +533,44 @@ A cached read is removed when it includes any of the given tags and its start an
 match. Only reads from this client's server and datasource are affected; search results
 are kept.
 
-### Performance Benefits
+### Performance
 
-**Typical Performance Improvements:**
-- API calls reduced by 60-80% for repeated queries
-- Query response time: 10-100x faster for cached data
-- Network traffic significantly reduced
-- Server load reduced
+A cache hit skips the request to IP.21, so it takes milliseconds however long the query
+took on the server. How much load it saves depends on how often the same reads repeat.
 
 **Example Timing:**
 ```python
 import time
 
-with AspenClient(base_url=url, auth=auth, cache=True) as client:
-    # First call - hits API (~500ms)
+with AspenClient(base_url=url, auth=auth, datasource="IP21", cache=True) as client:
+    # First call - hits API
     start = time.time()
     df1 = client.read(["TAG1"], start="2025-01-01 08:00:00", end="2025-01-01 09:00:00")
     api_time = time.time() - start
     print(f"API call: {api_time:.3f}s")
 
-    # Second call - from cache (~5ms)
+    # Second call - from cache
     start = time.time()
     df2 = client.read(["TAG1"], start="2025-01-01 08:00:00", end="2025-01-01 09:00:00")
     cache_time = time.time() - start
-    print(f"Cache hit: {cache_time:.3f}s ({api_time/cache_time:.0f}x faster!)")
+    print(f"Cache hit: {cache_time:.3f}s")
 ```
 
 ### Cache Behavior Details
 
-**What Gets Cached:**
-- Historical data reads (data older than 1 minute)
-- Search results (tag names and metadata)
-- Aggregate queries (AVG, MIN, MAX, RNG)
-
-**What Does NOT Get Cached (or uses short TTL):**
-- Current/recent data (within last 1 minute)
-- Snapshot reads (short 1-minute TTL)
-- Failed requests or errors
+**Cache Keys:**
+- A cached result is only returned for a request with the same tags (in the same order),
+  time range, interval, read type, fields, limit and output format, from the same server,
+  datasource and `server_timezone`
+- Results are copied in and out of the cache, so changing a returned DataFrame or list
+  does not change later cache hits
 
 **Thread Safety:**
 - All cache operations are thread-safe
 - Can be safely used in multi-threaded applications
-- No data corruption or race conditions
 
 **Memory Management:**
-- LRU eviction when max_size reached
+- The oldest entry is evicted when `max_size` is reached
 - Automatic cleanup of expired entries
 - Configurable size limits prevent memory issues
 
@@ -553,11 +584,12 @@ with AspenClient(base_url=url, auth=auth, cache=True) as client:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `base_url` | str | required | Base URL of Aspen ProcessData REST API |
+| `base_url` | str | required | URL of the ProcessData REST API, ending in `AtProcessDataREST.dll` |
 | `auth` | Auth\|tuple\|None | None | Authentication as (username, password) tuple or httpx Auth object |
 | `timeout` | float | 30.0 | Request timeout in seconds |
 | `verify_ssl` | bool | True | Whether to verify SSL certificates |
-| `datasource` | str\|None | None | Aspen datasource name (required for search) |
+| `datasource` | str\|None | None | IP.21 datasource name. Required: reads and searches raise `ValueError` without it |
+| `http_client` | httpx.Client\|None | None | Use this HTTP client instead of creating one. `auth`, `timeout` and `verify_ssl` are not applied to it |
 | `cache` | AspenCache\|CacheConfig\|bool\|None | None | Enable caching: True (default config), CacheConfig instance, or AspenCache instance |
 | `server_timezone` | str\|tzinfo\|None | None | Time zone of the IP.21 server, e.g. `"Europe/Berlin"`. See [Timestamps and Time Zones](#timestamps-and-time-zones) |
 | `retries` | int | 2 | How many times to repeat a request after a transient failure; 0 disables retries. See [Retries](#retries) |
@@ -578,25 +610,31 @@ def read(
     include: IncludeFields = IncludeFields.NONE,
     limit: int = 100_000,
     output: OutputFormat = OutputFormat.JSON,
-) -> pd.DataFrame | list[dict]:
+) -> pd.DataFrame | list[dict]: ...
 ```
+
+Type checkers and editors infer the exact type from `output`: `pd.DataFrame` for
+`OutputFormat.DATAFRAME`, `list[dict]` for `OutputFormat.JSON` (the default).
 
 **Parameters**:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `tags` | list[str] | required | List of tag names to retrieve (positional-only) |
-| `start` | str\|None | None | Start timestamp (ISO format). When omitted, defaults to SNAPSHOT read. |
-| `end` | str\|None | None | End timestamp (ISO format). When omitted, defaults to SNAPSHOT read. |
-| `interval` | int\|None | None | Interval in seconds for aggregated data (AVG reads) |
-| `read_type` | ReaderType | INT | Data retrieval mode (RAW, INT, SNAPSHOT, AVG) |
+| `tags` | list[str] | required | List of tag names to retrieve |
+| `start` | str\|None | None | Start timestamp (ISO format). With neither `start` nor `end`, current values are read (SNAPSHOT) |
+| `end` | str\|None | None | End timestamp (ISO format). Defaults to the current time when only `start` is given |
+| `interval` | int\|None | None | Seconds between interpolated values (INT), or the length of each aggregate period (AVG, MIN, MAX, RNG) |
+| `read_type` | ReaderType | INT | Data retrieval mode (RAW, INT, SNAPSHOT, AVG, MIN, MAX, RNG) |
 | `include` | IncludeFields | NONE | Which optional fields to include (NONE, STATUS, DESCRIPTION, ALL) |
 | `limit` | int | 100000 | Maximum rows to return per tag |
 | `output` | OutputFormat | JSON | Output format (JSON or DATAFRAME) |
 
 **Returns**:
-- If `output=OutputFormat.DATAFRAME`: pandas.DataFrame with time index and columns for each tag.
+- If `output=OutputFormat.DATAFRAME`: pandas.DataFrame with time index and columns for each tag. See [Reading Several Tags](#reading-several-tags).
 - If `output=OutputFormat.JSON`: List of dictionaries with `timestamp`, `tag`, `value`, and optional `description`/`status` fields.
+
+**Raises**: `ValueError` (no tags, or no `datasource`), `AspenSqlError` (IP.21 rejected the
+query), `httpx.HTTPStatusError` and `httpx.RequestError` (after any retries).
 
 **Examples**:
 ```python
@@ -640,8 +678,14 @@ def search(
     read_type: ReaderType = ReaderType.INT,
     include: IncludeFields = IncludeFields.NONE,
     output: OutputFormat = OutputFormat.JSON,
-) -> pd.DataFrame | list[dict] | list[str]:
+) -> pd.DataFrame | list[dict] | list[str]: ...
 ```
+
+Type checkers and editors infer the exact type:
+- Search without `start`: `list[str]`, or `list[dict]` with `include=IncludeFields.DESCRIPTION`
+  or `ALL`
+- Hybrid mode (with `start`): `pd.DataFrame` for `output=OutputFormat.DATAFRAME`, otherwise
+  `list[dict]`
 
 **Parameters**:
 
@@ -655,8 +699,8 @@ def search(
 | `end` | str\|None | None | End timestamp (defaults to current time if omitted) |
 | `interval` | int\|None | None | Interval in seconds for aggregated data |
 | `read_type` | ReaderType | INT | Data retrieval mode for hybrid mode |
-| `include` | IncludeFields | NONE | Fields to include (NONE, STATUS, DESCRIPTION, ALL) |
-| `output` | OutputFormat | JSON | Output format (JSON or DATAFRAME) |
+| `include` | IncludeFields | NONE | Search-only: DESCRIPTION or ALL adds descriptions. Hybrid: fields added to the data |
+| `output` | OutputFormat | JSON | Output format in hybrid mode (JSON or DATAFRAME) |
 
 **Returns**:
 - **Search-only mode** (no `start`):
@@ -710,7 +754,7 @@ tags = client.search("AI_1*", description="pressure", include=IncludeFields.DESC
 Data retrieval modes:
 
 - `ReaderType.RAW` - Raw data points as stored in historian
-- `ReaderType.INT` - Interpolated values at specified intervals (default)
+- `ReaderType.INT` - Interpolated values, `interval` seconds apart (default)
 - `ReaderType.SNAPSHOT` - Current snapshot of tag values
 - `ReaderType.AVG` - Average values from aggregates table (with/without interval)
 - `ReaderType.MIN` - Minimum value over the period (from aggregates table)
@@ -782,7 +826,7 @@ min_value = client.read(
 
 ```python
 with AspenClient(
-    base_url="https://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
     timeout=60.0,           # Request timeout (seconds)
     verify_ssl=True,        # SSL certificate verification
@@ -807,7 +851,7 @@ server local time:
 
 ```python
 with AspenClient(
-    base_url="https://aspen.example.com/ProcessData",
+    base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
     auth=("user", "password"),
     datasource="IP21",
     server_timezone="Europe/Berlin",
@@ -817,6 +861,22 @@ with AspenClient(
 ```
 
 Aggregate values (AVG, MIN, MAX, RNG) are stamped at the end of their period.
+
+### Logging
+
+aspy21 logs through the standard `logging` module under the `aspy21` logger. To print its
+messages with a timestamped format:
+
+```python
+from aspy21 import configure_logging
+
+configure_logging("INFO")  # DEBUG, INFO, WARNING (default), ERROR or CRITICAL
+configure_logging()        # level from the ASPEN_LOG_LEVEL environment variable
+```
+
+At `DEBUG`, every request is logged with its SQL query and the start of the response.
+Applications that configure logging themselves can set the level of the `aspy21` logger
+instead.
 
 ### Retries
 
@@ -835,10 +895,10 @@ logged as a warning. When all attempts fail, the error from the last one is rais
 
 ```python
 # More attempts for an unreliable network
-client = AspenClient(base_url=..., retries=5)
+client = AspenClient(base_url=..., datasource="IP21", retries=5)
 
 # Fail fast, no retries
-client = AspenClient(base_url=..., retries=0)
+client = AspenClient(base_url=..., datasource="IP21", retries=0)
 ```
 
 Retries apply to every request, including those sent through a custom `http_client`.
@@ -853,7 +913,7 @@ import httpx
 
 try:
     with AspenClient(
-        base_url="https://aspen.example.com/ProcessData",
+        base_url="http://aspen.example.com/ProcessData/AtProcessDataREST.dll",
         auth=("user", "password"),
         datasource="IP21"
     ) as client:
@@ -865,6 +925,8 @@ try:
         )
 except AspenSqlError as e:
     print(f"IP.21 rejected the query: {e}")  # Returned by the server with HTTP 200
+except ValueError as e:
+    print(f"Invalid request: {e}")  # e.g. no datasource; AspenSqlError is a subclass
 except httpx.HTTPStatusError as e:
     print(f"HTTP error: {e.response.status_code}")
 except httpx.RequestError as e:

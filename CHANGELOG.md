@@ -19,6 +19,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `examples/multi_tag_merge.py` checks how multi-tag reads are merged: offline with
   mocked responses (gaps, duplicate timestamps, integers), then against the server in `.env`
+- The package now ships a `py.typed` marker (PEP 561), so type checkers such as mypy use
+  its annotations instead of treating it as untyped
+- Typed overloads for `read()` and `search()`: editors and type checkers infer
+  `pd.DataFrame` for `output=OutputFormat.DATAFRAME`, `list[dict]` for JSON output and
+  `list[str]` for a tag name search, instead of a union that needed `isinstance` checks
+
+### Documentation
+- README examples used a `base_url` without `AtProcessDataREST.dll`, and several omitted
+  the `datasource` that reads and searches require. Docstring examples also passed
+  `start`/`end` positionally, which raises `TypeError`. All examples are now checked by tests
+- Corrected the caching documentation: snapshot reads are not cached, and `ttl_snapshot`
+  and `ttl_metadata` have no effect
+- Documented the layout of multi-tag results (gaps, `<tag>_status` columns, repeated
+  timestamps), logging with `configure_logging()`, the `http_client` option, and the
+  errors `read()` and `search()` raise
 
 ### Changed
 - Much smaller DEBUG logs for aggregate reads: the parser no longer logs every row and
