@@ -1,9 +1,13 @@
-"""Smoke test for the SQL/XML escaping fix against a real IP.21 server.
+"""Smoke test against a real IP.21 server: escaping, SQL errors, time zones and retries.
 
 Reads connection settings from .env in the project root, the same way as
 examples/basic_usage.py (see .env.example). The first tag in ASPEN_TEST_TAGS
 is used for the read checks; the last one for the aggregate checks (use a numeric tag,
 e.g. ASPEN_TEST_TAGS=GXV1255.PV,CTI4551.PV).
+
+The retry checks put a transport in front of the server that fails the first requests
+(HTTP 503 or a connection error) before forwarding the rest, so the server only ever
+receives the same read-only requests as the other checks.
 
 Usage:
     pip install ".[examples]"
@@ -11,11 +15,14 @@ Usage:
 """
 
 import json
+import logging
 import os
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import httpx
 from dotenv import load_dotenv
 
 import aspy21
@@ -30,9 +37,13 @@ from aspy21 import (
 from aspy21.errors import raise_for_sql_error
 
 # Fail fast if an older aspy21 (e.g. from PyPI) is installed instead of this checkout
-if not hasattr(query_builder, "sql_literal") or not hasattr(utils, "server_now"):
+if (
+    not hasattr(query_builder, "sql_literal")
+    or not hasattr(utils, "server_now")
+    or not hasattr(aspy21, "retry")
+):
     print(f"ERROR: aspy21 {aspy21.__version__} at {aspy21.__file__}")
-    print("does not include the escaping and timezone fixes.")
+    print("does not include the escaping, timezone and retry changes.")
     print("Install this checkout with: pip install -e .")
     sys.exit(1)
 
@@ -163,6 +174,107 @@ def timezone_diagnostics(client: AspenClient) -> None:
     print()
 
 
+class FlakyTransport(httpx.BaseTransport):
+    """Fail the first `fail` requests, then forward the rest to the real server."""
+
+    def __init__(self, fail: int, error: str = "503") -> None:
+        self.fail = fail
+        self.error = error
+        self.attempts = 0  # requests aspy21 sent, failed or forwarded
+        self.forwarded = 0  # requests that reached the server
+        self.real = httpx.HTTPTransport(verify=verify_ssl)
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        self.attempts += 1
+        if self.attempts <= self.fail:
+            if self.error == "connect":
+                raise httpx.ConnectError("injected by smoke test", request=request)
+            return httpx.Response(503, request=request)
+        self.forwarded += 1
+        return self.real.handle_request(request)
+
+
+class RetryLog(logging.Handler):
+    """Collect aspy21 retry warnings, whatever ASPEN_LOG_LEVEL is set to."""
+
+    def __enter__(self) -> list[str]:
+        self.messages: list[str] = []
+        self.logger = logging.getLogger("aspy21.retry")
+        self.old_level = self.logger.level
+        self.logger.setLevel(logging.WARNING)
+        self.logger.addHandler(self)
+        return self.messages
+
+    def __exit__(self, *exc: object) -> None:
+        self.logger.removeHandler(self)
+        self.logger.setLevel(self.old_level)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.messages.append(record.getMessage())
+
+
+def flaky_client(transport: httpx.BaseTransport, **kwargs) -> AspenClient:
+    http = httpx.Client(transport=transport, auth=(username, password), timeout=timeout)
+    return AspenClient(base_url, datasource=datasource, http_client=http, **kwargs)
+
+
+def retry_recovers(fail: int, error: str, operation: str) -> str:
+    """Fail `fail` requests, then expect real data after exactly `fail` retries."""
+    transport = FlakyTransport(fail, error)
+    with RetryLog() as warnings, flaky_client(transport) as client:
+        if operation == "search":
+            result = client.search(tag=tag[:3] + "*", limit=5)
+        else:
+            result = client.read([tag])
+    if not result:
+        raise AssertionError("No data after retries")
+    if len(warnings) != fail or transport.forwarded != 1:
+        raise AssertionError(
+            f"Expected {fail} retries and 1 request to the server, got {len(warnings)} "
+            f"retries and {transport.forwarded} requests: {warnings}"
+        )
+    return f"{warnings} -> {result}"
+
+
+def retry_gives_up(fail: int, retries: int) -> str:
+    """Fail every attempt; expect the 503 to be raised after `retries` retries."""
+    transport = FlakyTransport(fail)
+    with RetryLog() as warnings, flaky_client(transport, retries=retries) as client:
+        try:
+            client.read([tag])
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code != 503:
+                raise
+        else:
+            raise AssertionError("Read succeeded although every attempt failed")
+    if transport.attempts != retries + 1 or len(warnings) != retries or transport.forwarded:
+        raise AssertionError(
+            f"Expected {retries + 1} attempts and none forwarded, got {transport.attempts} "
+            f"attempts, {transport.forwarded} forwarded: {warnings}"
+        )
+    return f"HTTPStatusError 503 after {transport.attempts} attempt(s): {warnings}"
+
+
+def retry_unreachable() -> str:
+    """A refused connection on this machine: retried, then ConnectError (no server contact)."""
+    began = time.monotonic()
+    with RetryLog() as warnings:
+        http = httpx.Client(timeout=5)
+        with AspenClient(
+            "http://127.0.0.1:1/ProcessData", datasource=datasource, http_client=http
+        ) as client:
+            try:
+                client.read([tag])
+            except httpx.ConnectError:
+                pass
+            else:
+                raise AssertionError("Read succeeded against a closed port")
+    elapsed = time.monotonic() - began
+    if len(warnings) != 2 or elapsed < 1.5:
+        raise AssertionError(f"Expected 2 retries over >=1.5s, got {warnings} in {elapsed:.1f}s")
+    return f"ConnectError after {elapsed:.1f}s: {warnings}"
+
+
 def expect_empty(result: object) -> object:
     if result:
         raise AssertionError(f"Injection returned data: {result}")
@@ -212,6 +324,12 @@ with AspenClient(
             read_type=ReaderType.AVG,
             interval=600,
         ),
+        "2 x 503, then data (retries)": lambda: retry_recovers(2, "503", "read"),
+        "connection error, then data (retries)": lambda: retry_recovers(1, "connect", "read"),
+        "503 on browse search, then data (retries)": lambda: retry_recovers(1, "503", "search"),
+        "503 on every attempt, gives up after 3 (retries)": lambda: retry_gives_up(3, 2),
+        "retries=0 fails on first 503 (retries)": lambda: retry_gives_up(1, 0),
+        "closed local port, retried then ConnectError (retries)": retry_unreachable,
     }
     failed = 0
     for name, fn in checks.items():
