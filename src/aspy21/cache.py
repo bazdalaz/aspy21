@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import logging
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -13,6 +15,17 @@ from typing import Any
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+
+def _copy_value(value: Any) -> Any:
+    """Return an independent copy of a cached value.
+
+    Results are copied on the way in and out so that callers modifying a returned
+    DataFrame or list cannot change what later cache hits return.
+    """
+    if isinstance(value, pd.DataFrame):
+        return value.copy(deep=True)
+    return copy.deepcopy(value)
 
 
 @dataclass
@@ -41,14 +54,24 @@ class CacheConfig:
 class CacheEntry:
     """Cache entry with TTL support."""
 
-    def __init__(self, value: Any, ttl_seconds: int):
+    def __init__(
+        self,
+        value: Any,
+        ttl_seconds: int,
+        operation: str = "",
+        params: dict[str, Any] | None = None,
+    ):
         """Initialize cache entry.
 
         Args:
             value: Value to cache
             ttl_seconds: Time-to-live in seconds
+            operation: Operation the value was cached for
+            params: Parameters the value was cached with, used by invalidate_where()
         """
         self.value = value
+        self.operation = operation
+        self.params = params or {}
         self.created_at = datetime.now()
         self.expires_at = self.created_at + timedelta(seconds=ttl_seconds)
 
@@ -161,7 +184,7 @@ class AspenCache:
 
             self._hits += 1
             logger.debug(f"Cache hit: {operation} (key={key}, {entry})")
-            return entry.value
+            return _copy_value(entry.value)
 
     def set(
         self, operation: str, value: Any, ttl_seconds: int | None = None, **params: Any
@@ -193,7 +216,7 @@ class AspenCache:
         with self._lock:
             self._cleanup_expired()
             self._evict_if_needed()
-            entry = CacheEntry(value, ttl_seconds)
+            entry = CacheEntry(_copy_value(value), ttl_seconds, operation, dict(params))
             self._cache[key] = entry
             logger.debug(f"Cache set: {operation} (key={key}, ttl={ttl_seconds}s)")
 
@@ -224,6 +247,23 @@ class AspenCache:
                 return 1
 
             return 0
+
+    def invalidate_where(self, predicate: Callable[[str, dict[str, Any]], bool]) -> int:
+        """Invalidate every entry for which predicate(operation, params) is true.
+
+        Args:
+            predicate: Called with each entry's operation and the parameters it was
+                cached with. Entries for which it returns True are removed.
+
+        Returns:
+            Number of entries invalidated
+        """
+        with self._lock:
+            keys = [k for k, v in self._cache.items() if predicate(v.operation, v.params)]
+            for key in keys:
+                del self._cache[key]
+        logger.debug(f"Invalidated {len(keys)} matching cache entries")
+        return len(keys)
 
     def get_stats(self) -> dict[str, Any]:
         """Get cache statistics.
