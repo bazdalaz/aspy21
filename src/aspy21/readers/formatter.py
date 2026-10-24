@@ -148,7 +148,7 @@ class DataFrameFormatter(OutputFormatter):
 class JsonFormatter(OutputFormatter):
     """Formatter strategy for JSON list output.
 
-    Converts DataFrame to list of dictionaries with one record per tag per timestamp.
+    Converts DataFrames to a list of dictionaries with one record per tag per timestamp.
     """
 
     def format(
@@ -160,51 +160,72 @@ class JsonFormatter(OutputFormatter):
         """Convert DataFrame to JSON list format.
 
         Args:
-            df: Merged DataFrame with all tag data
+            df: DataFrame with tag data
             tags: List of requested tag names
             tag_descriptions: Dictionary of tag descriptions
 
         Returns:
             List of dictionaries with timestamp, tag, value, and optional fields
         """
-        json_data: list[dict] = []
+        return self.format_frames([df], tags, tag_descriptions)
 
-        # Read values column by column: iterrows() casts each row to one dtype, which
-        # turns integers into floats when a row also holds a float column
-        tags = [tag for tag in tags if tag in df.columns]
-        values = {tag: df[tag].tolist() for tag in tags}
-        statuses = {}
-        if self.include_status:
-            statuses = {
-                tag: df[f"{tag}_status"].tolist() for tag in tags if f"{tag}_status" in df.columns
-            }
+    def format_frames(
+        self,
+        frames: list[pd.DataFrame],
+        tags: list[str],
+        tag_descriptions: dict[str, str],
+    ) -> list[dict]:
+        """Convert the readers' frames to JSON list format, sorted by time.
 
-        for position, idx in enumerate(df.index):
-            # idx is pandas Timestamp, which has isoformat method
-            ts = idx.isoformat() if hasattr(idx, "isoformat") else str(idx)
+        Records are built from each frame before merging: in a merged DataFrame, a tag
+        column with gaps holds floats, which would turn integer values into 1.0.
 
+        Args:
+            frames: DataFrames indexed by time, one or more tags each
+            tags: List of requested tag names (sets the order within a timestamp)
+            tag_descriptions: Dictionary of tag descriptions
+
+        Returns:
+            List of dictionaries with timestamp, tag, value, and optional fields, in the
+            row order of the merged DataFrame
+        """
+        tag_position = {tag: position for position, tag in enumerate(tags)}
+        keyed: list[tuple[tuple, dict]] = []
+        for frame in frames:
+            # Several values of a tag at one timestamp keep their order (see _merge_frames)
+            occurrences = frame.groupby(level=0).cumcount().tolist()
             for tag in tags:
-                value = values[tag][position]
-                if not _is_present(value):
+                if tag not in frame.columns:
                     continue
+                status_col = f"{tag}_status"
+                statuses = (
+                    frame[status_col].tolist()
+                    if self.include_status and status_col in frame.columns
+                    else None
+                )
+                for position, (idx, value) in enumerate(zip(frame.index, frame[tag].tolist())):
+                    if not _is_present(value):
+                        continue
 
-                record: dict[str, object] = {
-                    "timestamp": ts,
-                    "tag": tag,
-                    "value": _python_value(value),
-                }
+                    record: dict[str, object] = {
+                        # idx is pandas Timestamp, which has isoformat method
+                        "timestamp": idx.isoformat() if hasattr(idx, "isoformat") else str(idx),
+                        "tag": tag,
+                        "value": _python_value(value),
+                    }
 
-                # Add optional fields based on configuration
-                if self.with_description:
-                    record["description"] = tag_descriptions.get(tag, "")
+                    # Add optional fields based on configuration
+                    if self.with_description:
+                        record["description"] = tag_descriptions.get(tag, "")
 
-                if tag in statuses:
-                    status_value = statuses[tag][position]
-                    if _is_present(status_value):
-                        record["status"] = _python_value(status_value)
+                    if statuses is not None and _is_present(statuses[position]):
+                        record["status"] = _python_value(statuses[position])
 
-                json_data.append(record)
+                    key = (idx, occurrences[position], tag_position[tag])
+                    keyed.append((key, record))
 
+        keyed.sort(key=lambda item: item[0])
+        json_data = [record for _, record in keyed]
         logger.debug(f"Converted to {len(json_data)} JSON records")
         return json_data
 
@@ -245,24 +266,20 @@ class DataFormatter:
                 return []
             return pd.DataFrame()
 
-        # Common preprocessing: merge frames and sort by time index
-        merged_df = _merge_frames(frames)
-
         # Select appropriate formatting strategy
-        formatter: OutputFormatter
+        result: pd.DataFrame | list[dict]
         if as_df:
             formatter = DataFrameFormatter(
                 include_status=include_status,
                 with_description=with_description,
             )
+            result = formatter.format(_merge_frames(frames), tags, tag_descriptions)
         else:
-            formatter = JsonFormatter(
+            # JSON records come from the unmerged frames, so each tag keeps its own type
+            result = JsonFormatter(
                 include_status=include_status,
                 with_description=with_description,
-            )
-
-        # Use the selected strategy to format the output
-        result = formatter.format(merged_df, tags, tag_descriptions)
+            ).format_frames(frames, tags, tag_descriptions)
 
         # Log success information
         if as_df and isinstance(result, pd.DataFrame):

@@ -1,9 +1,9 @@
 """Check how a live IP.21 server applies row limits and intervals to RAW reads.
 
-read(tags, limit=N) promises at most N rows per tag. For several tags the client asks the
-server for N * len(tags) rows in total and trims each tag to N, which only gives every tag
-its N rows if the server spreads the total across tags. This script checks that, and
-whether the server ignores the period the client sends when a RAW read has an interval.
+read(tags, limit=N) promises up to N rows per tag. IP.21 applies a query's row limit to
+the whole result and returns it grouped by tag, so the client re-reads tags that a
+multi-tag query cut short. This script checks that every tag gets its N rows, and whether
+the server ignores the period the client sends when a RAW read has an interval.
 
 Reads connection settings from .env in the project root (see .env.example) and uses the
 tags in ASPEN_TEST_TAGS that have more than --limit values in the time range.

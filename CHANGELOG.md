@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.10] - 2026-10-24
+
+**Multi-tag read release** - Reads of several tags return every value: `limit` applies to
+each tag, integer values are no longer dropped from JSON output, and repeated timestamps
+are kept. The package is now typed for editors and type checkers, and server errors share
+the new `AspenError` base class.
+
 ### Changed
 - Errors reported by the Browse endpoint (search by tag name only) raise the new
   `AspenBrowseError` instead of a plain `ValueError`. Both it and `AspenSqlError` derive
@@ -24,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   since they are not applied to a provided client
 - The history query sent `to="30   "` (with trailing spaces); it now sends `to="30"`. The
   DEBUG log no longer reports an unchanged row limit for single-tag reads
+- Much smaller DEBUG logs for aggregate reads: the parser no longer logs every row and
+  the reader no longer logs the full response body (a 500-character preview remains).
+  A 1,440-row read went from about 2,900 log lines to 20
+- Rows the aggregates parser skips (no timestamp, no value, no tag name, invalid
+  structure) are reported in one warning per tag with a count, instead of one warning
+  per row. Per-tag parse summaries moved from INFO to DEBUG
 
 ### Fixed
 - `limit` was not applied per tag in RAW and INT reads of several tags. The server's row
@@ -35,8 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   were not read
 - JSON output (the default) dropped every value stored as an integer, so integer-valued
   tags returned no data. Integer and status values are now returned, and values are plain
-  Python types (`1`, `2.5`) instead of numpy scalars. An integer tag read together with a
-  float tag no longer comes back as floats
+  Python types (`1`, `2.5`) instead of numpy scalars. Integer values and statuses stay
+  integers when read together with other tags, also when the tags have values at
+  different timestamps
 - Reading several tags failed with `InvalidIndexError` when one tag had two values at the
   same timestamp and another tag did not, and a tag with one value at that timestamp was
   repeated on each of the other tag's rows. Every value is now kept once
@@ -61,14 +75,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documented the layout of multi-tag results (gaps, `<tag>_status` columns, repeated
   timestamps), logging with `configure_logging()`, the `http_client` option, and the
   errors `read()` and `search()` raise
-
-### Changed
-- Much smaller DEBUG logs for aggregate reads: the parser no longer logs every row and
-  the reader no longer logs the full response body (a 500-character preview remains).
-  A 1,440-row read went from about 2,900 log lines to 20
-- Rows the aggregates parser skips (no timestamp, no value, no tag name, invalid
-  structure) are reported in one warning per tag with a count, instead of one warning
-  per row. Per-tag parse summaries moved from INFO to DEBUG
 
 ## [0.0.9] - 2026-10-22
 
@@ -322,7 +328,8 @@ pip install aspy21
 
 This is the first stable release. The API is considered stable and follows semantic versioning. Breaking changes will only occur in major version updates (e.g., 1.0.0).
 
-[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.9...HEAD
+[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.10...HEAD
+[0.0.10]: https://github.com/bazdalaz/aspy21/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/bazdalaz/aspy21/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/bazdalaz/aspy21/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/bazdalaz/aspy21/compare/v0.0.6...v0.0.7
