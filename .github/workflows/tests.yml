@@ -7,8 +7,10 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # ubuntu-latest (26.04) has no Python 3.9 builds; 24.04 has every version below
+    runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false  # report every Python version, not only the first failure
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
 
