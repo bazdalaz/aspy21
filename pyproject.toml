@@ -112,7 +112,7 @@ exclude_lines = [
 ]
 
 [tool.pyright]
-include = ["src", "tests/typing"]
+include = ["src", "tests/type_checks"]
 exclude = ["**/__pycache__", ".venv", "build", "dist", "scripts"]
 pythonVersion = "3.9"
 typeCheckingMode = "standard"

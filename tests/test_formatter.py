@@ -241,3 +241,52 @@ def test_read_with_duplicates_and_integers(output):
         assert isinstance(result, pd.DataFrame)
         assert result["A"].dropna().tolist() == [1, 2]
         assert result["B"].dropna().tolist() == [20]
+
+
+class TestJsonFromFrames:
+    """JSON records are built from the readers' frames, not the merged DataFrame."""
+
+    def test_integer_tags_with_gaps_stay_integer(self):
+        # Previously 1.0 and 0.0: in the merged DataFrame both columns have gaps
+        records = to_json(
+            [
+                frame("A", ["2025-01-01 00:00"], [1], status=[0]),
+                frame("B", ["2025-01-01 00:01"], [2], status=[0]),
+            ],
+            ["A", "B"],
+            include_status=True,
+        )
+
+        assert [(r["value"], r["status"]) for r in records] == [(1, 0), (2, 0)]
+        assert all(type(r["value"]) is int and type(r["status"]) is int for r in records)
+
+    def test_json_matches_dataframe_values_and_order(self):
+        frames = [
+            frame(
+                "A",
+                ["2025-01-01 00:02", "2025-01-01 00:00", "2025-01-01 00:00"],
+                [3, 1, 2],
+                status=[0, 1, 0],
+            ),
+            frame("B", ["2025-01-01 00:00", "2025-01-01 00:01"], [10.5, 20.5], status=[0, 0]),
+        ]
+        tags = ["A", "B"]
+
+        df = merge(frames, tags)
+        expected = [
+            (ts.isoformat(), tag, df[tag].iloc[i])
+            for i, ts in enumerate(df.index)
+            for tag in tags
+            if pd.notna(df[tag].iloc[i])
+        ]
+        records = to_json(frames, tags)
+
+        assert [(r["timestamp"], r["tag"], r["value"]) for r in records] == expected
+
+    def test_tag_order_within_timestamp_follows_request(self):
+        frames = [
+            frame("A", ["2025-01-01 00:00"], [1]),
+            frame("B", ["2025-01-01 00:00"], [2]),
+        ]
+
+        assert [r["tag"] for r in to_json(frames, ["B", "A"])] == ["B", "A"]
