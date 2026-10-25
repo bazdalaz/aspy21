@@ -447,7 +447,8 @@ class AspenClient:
         """Read process data for multiple tags.
 
         Args:
-            tags: List of tag names to retrieve
+            tags: List of tag names to retrieve. Case does not matter, as in IP.21; results
+                use the names as given here.
             start: Start timestamp (ISO format or compatible string). If start and end are
                 both omitted, the current values are read (SNAPSHOT). Naive values are server
                 local time; timezone-aware values are converted (see server_timezone).

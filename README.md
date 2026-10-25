@@ -623,7 +623,7 @@ Type checkers and editors infer the exact type from `output`: `pd.DataFrame` for
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `tags` | list[str] | required | List of tag names to retrieve |
+| `tags` | list[str] | required | List of tag names to retrieve. Case does not matter (`gtime.pv` reads `GTIME.PV`); results use the names as given |
 | `start` | str\|None | None | Start timestamp (ISO format). With neither `start` nor `end`, current values are read (SNAPSHOT) |
 | `end` | str\|None | None | End timestamp (ISO format). Defaults to the current time when only `start` is given |
 | `interval` | int\|None | None | Seconds between interpolated values (INT), or the length of each aggregate period (AVG, MIN, MAX, RNG) |

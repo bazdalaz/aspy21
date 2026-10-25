@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+- README and the `read()` docstring say that tag names are case-insensitive and that
+  results use the names as given
+
 ## [0.0.11] - 2026-10-25
 
 ### Fixed
