@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The client's `timeout` now also applies on the server. Every SQL query told IP.21 to stop
+  after 30 seconds (`to="30"`), so `AspenClient(timeout=120)` did not let slow queries run
+  longer. Queries now send the HTTP read timeout, rounded up to whole seconds (30 by default,
+  as before; 30 when the client has no timeout). Aggregate queries have no such setting
+
+### Added
+- `scripts/check_server_timeout.py` shows how a live server applies the query timeout
+
 ## [0.0.11] - 2026-10-25
 
 ### Fixed

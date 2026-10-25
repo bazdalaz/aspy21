@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from ..query_builder import server_timeout
 from ..retry import send
 
 if TYPE_CHECKING:
@@ -47,6 +48,10 @@ class BaseReader(ABC):
         self.http_client = http_client
         self.server_timezone = server_timezone
         self.retries = retries
+
+    def _server_timeout(self) -> int:
+        """Return the query timeout for IP.21, matching the HTTP client's read timeout."""
+        return server_timeout(self.http_client.timeout.read)
 
     def _post_sql(self, xml_query: str) -> httpx.Response:
         """POST a query to the SQL endpoint, retrying transient failures.

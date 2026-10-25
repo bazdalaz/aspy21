@@ -13,7 +13,7 @@ import pandas as pd
 from .cache import AspenCache, CacheConfig
 from .errors import AspenBrowseError, raise_for_sql_error
 from .models import IncludeFields, OutputFormat, ReaderType
-from .query_builder import SqlSearchQueryBuilder
+from .query_builder import SqlSearchQueryBuilder, server_timeout
 from .retry import send
 from .utils import check_timezone, localize_server_index, server_now, to_server_time
 
@@ -88,7 +88,8 @@ class AspenClient:
                 e.g. "http://server/ProcessData/AtProcessDataREST.dll"
             auth: Authentication as (username, password) tuple or httpx Auth object.
                   If None, no authentication is used.
-            timeout: Request timeout in seconds (default: 30.0)
+            timeout: Request timeout in seconds (default: 30.0). IP.21 is given the same
+                time to run each query, rounded up to whole seconds.
             verify_ssl: Whether to verify SSL certificates (default: True)
             datasource: IP.21 datasource name, e.g. "IP21". Required: read() and
                 search() raise ValueError without it.
@@ -673,6 +674,7 @@ class AspenClient:
             description=description,
             tag_pattern=tag_pattern,
             max_results=max_results,
+            timeout=server_timeout(self._client.timeout.read),
         )
 
         logger.debug(f"SQL query XML: {xml}")

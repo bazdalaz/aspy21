@@ -166,6 +166,7 @@ class SqlHistoryReader(BaseReader):
             max_rows=row_limit,
             with_description=with_description,
             include_status=include_status,
+            timeout=self._server_timeout(),
         )
 
         logger.debug(f"POST {self.base_url}/SQL")

@@ -7,6 +7,7 @@ Each builder handles a specific query format (SQL history, snapshot, search, agg
 from __future__ import annotations
 
 import logging
+import math
 from abc import ABC
 from xml.sax.saxutils import quoteattr
 
@@ -77,6 +78,26 @@ def cdata(sql: str) -> str:
     return f"<![CDATA[{sql}]]>"
 
 
+DEFAULT_SERVER_TIMEOUT = 30  # seconds
+
+
+def server_timeout(read_timeout: float | None) -> int:
+    """Return the query timeout to send to IP.21 (the to="..." attribute) in seconds.
+
+    The server gets as long as the HTTP client waits for the response, rounded up to
+    whole seconds, so a longer client timeout also lets slow queries run longer.
+
+    Args:
+        read_timeout: The HTTP client's read timeout in seconds, or None for no timeout
+
+    Returns:
+        Whole seconds, at least 1; DEFAULT_SERVER_TIMEOUT when read_timeout is None
+    """
+    if read_timeout is None:
+        return DEFAULT_SERVER_TIMEOUT
+    return max(1, math.ceil(read_timeout))
+
+
 class QueryBuilder(ABC):  # noqa: B024
     """Abstract base class for query building strategies.
 
@@ -103,6 +124,7 @@ class SqlHistoryQueryBuilder(QueryBuilder):
         max_rows: int = 100000,
         with_description: bool = False,
         include_status: bool = False,
+        timeout: int = DEFAULT_SERVER_TIMEOUT,
     ) -> str:
         """Generate SQL query for historical data read.
 
@@ -116,6 +138,7 @@ class SqlHistoryQueryBuilder(QueryBuilder):
             max_rows: Maximum number of rows to return
             with_description: Include ip_description field in response
             include_status: Include status field in response
+            timeout: Server-side query timeout in seconds (see server_timeout())
 
         Returns:
             XML query string for SQL endpoint
@@ -178,7 +201,7 @@ class SqlHistoryQueryBuilder(QueryBuilder):
         xml = (
             f'<SQL g="aspy21_history" t="SQLplus" ds={xml_attr(datasource)} '
             f'dso="CHARINT=N;CHARFLOAT=N;CHARTIME=N;CONVERTERRORS=N" '
-            f'm="{int(max_rows)}" to="30" response="Record" s="1">'  # s=1 for Select
+            f'm="{int(max_rows)}" to="{int(timeout)}" response="Record" s="1">'  # s=1: Select
             f"{cdata(sql_query)}"
             f"</SQL>"
         )
@@ -194,6 +217,7 @@ class SqlSnapshotQueryBuilder(QueryBuilder):
         tags: list[str] | str,
         datasource: str,
         with_description: bool = False,
+        timeout: int = DEFAULT_SERVER_TIMEOUT,
     ) -> str:
         """Generate SQL query for current snapshot values.
 
@@ -201,6 +225,7 @@ class SqlSnapshotQueryBuilder(QueryBuilder):
             tags: One or more tag names to fetch.
             datasource: Aspen datasource name.
             with_description: Include ip_description field in response.
+            timeout: Server-side query timeout in seconds (see server_timeout()).
 
         Returns:
             XML query string for SQL snapshot endpoint.
@@ -223,7 +248,7 @@ class SqlSnapshotQueryBuilder(QueryBuilder):
         xml = (
             f'<SQL g="aspy21_snapshot" t="SQLplus" ds={xml_attr(datasource)} '
             f'dso="CHARINT=N;CHARFLOAT=N;CHARTIME=N;CONVERTERRORS=N" '
-            f'm="{len(tag_list)}" to="30" response="Record" s="1">'
+            f'm="{len(tag_list)}" to="{int(timeout)}" response="Record" s="1">'
             f"{cdata(sql_query)}"
             f"</SQL>"
         )
@@ -240,6 +265,7 @@ class SqlSearchQueryBuilder(QueryBuilder):
         description: str,
         tag_pattern: str = "*",
         max_results: int = 10000,
+        timeout: int = DEFAULT_SERVER_TIMEOUT,
     ) -> str:
         """Generate XML query for SQL-based tag search.
 
@@ -248,6 +274,7 @@ class SqlSearchQueryBuilder(QueryBuilder):
             description: Description pattern to search for (supports * wildcards)
             tag_pattern: Tag name pattern (supports * and ? wildcards)
             max_results: Maximum number of results
+            timeout: Server-side query timeout in seconds (see server_timeout())
 
         Returns:
             XML query string for SQL endpoint
@@ -280,7 +307,7 @@ class SqlSearchQueryBuilder(QueryBuilder):
         xml = (
             f'<SQL g="aspy21_search" t="SQLplus" ds={xml_attr(datasource)} '
             f'dso="CHARINT=N;CHARFLOAT=N;CHARTIME=N;CONVERTERRORS=N" '
-            f'm="{int(max_results)}" to="30" response="Original" s="1">'
+            f'm="{int(max_results)}" to="{int(timeout)}" response="Original" s="1">'
             f"{cdata(sql_query)}"
             f"</SQL>"
         )

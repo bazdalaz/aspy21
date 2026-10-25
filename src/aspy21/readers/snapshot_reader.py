@@ -83,6 +83,7 @@ class SnapshotReader(BaseReader):
             tags=tags,
             datasource=self.datasource,
             with_description=with_description,
+            timeout=self._server_timeout(),
         )
 
         sql_url = f"{self.base_url}/SQL"
