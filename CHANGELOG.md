@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.11] - 2026-10-25
+
 ### Fixed
 - Tags requested in a different letter case than IP.21 stores them (e.g. `gtime.pv` for
   `GTIME.PV`) returned no data, with a "No data in SQL response" warning. IP.21 matches tag
@@ -335,7 +337,8 @@ pip install aspy21
 
 This is the first stable release. The API is considered stable and follows semantic versioning. Breaking changes will only occur in major version updates (e.g., 1.0.0).
 
-[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.10...HEAD
+[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.11...HEAD
+[0.0.11]: https://github.com/bazdalaz/aspy21/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/bazdalaz/aspy21/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/bazdalaz/aspy21/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/bazdalaz/aspy21/compare/v0.0.7...v0.0.8
