@@ -59,12 +59,12 @@ def counts(df: pd.DataFrame, tags: list[str]) -> dict[str, int]:
 
 @pytest.mark.parametrize(
     "tags",
-    [["GTIME", "PHASE", "GTI118"], ["GTI118", "PHASE", "GTIME"]],
+    [["FAST", "MEDIUM", "SLOW"], ["SLOW", "MEDIUM", "FAST"]],
     ids=["dense-first", "dense-last"],
 )
 def test_every_tag_gets_its_limit(mock_api, tags):
     """The production case: previously the first tag got 10 rows and the others none."""
-    rows = {"GTIME": 120, "PHASE": 60, "GTI118": 38}
+    rows = {"FAST": 120, "MEDIUM": 60, "SLOW": 38}
 
     df, calls = read(mock_api, rows, tags, limit=10)
 

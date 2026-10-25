@@ -74,7 +74,7 @@ with AspenClient(
 ) as client:
     # Read historical data
     df = client.read(
-        ["ATI111", "AP101.PV"],
+        ["TEMP_201", "PRESS_201.PV"],
         start="2025-06-20 08:00:00",
         end="2025-06-20 09:00:00",
         read_type=ReaderType.RAW,
@@ -623,7 +623,7 @@ Type checkers and editors infer the exact type from `output`: `pd.DataFrame` for
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `tags` | list[str] | required | List of tag names to retrieve. Case does not matter (`gtime.pv` reads `GTIME.PV`); results use the names as given |
+| `tags` | list[str] | required | List of tag names to retrieve. Case does not matter (`tag1.pv` reads `TAG1.PV`); results use the names as given |
 | `start` | str\|None | None | Start timestamp (ISO format). With neither `start` nor `end`, current values are read (SNAPSHOT) |
 | `end` | str\|None | None | End timestamp (ISO format). Defaults to the current time when only `start` is given |
 | `interval` | int\|None | None | Seconds between interpolated values (INT), or the length of each aggregate period (AVG, MIN, MAX, RNG) |
@@ -644,14 +644,14 @@ query), `httpx.HTTPStatusError` and `httpx.RequestError` (after any retries). Se
 ```python
 # JSON output (default)
 data = client.read(
-    ["ATI111"],
+    ["TEMP_201"],
     start="2025-01-01 00:00:00",
     end="2025-01-01 01:00:00"
 )
 
 # DataFrame output with status and descriptions
 df = client.read(
-    ["ATI111", "AP101.PV"],
+    ["TEMP_201", "PRESS_201.PV"],
     start="2025-01-01 00:00:00",
     end="2025-01-01 01:00:00",
     output=OutputFormat.DATAFRAME,
@@ -860,7 +860,7 @@ with AspenClient(
     datasource="IP21",
     server_timezone="Europe/Berlin",
 ) as client:
-    data = client.read(["ATI111"], start="2025-06-20T06:00:00Z", end="2025-06-20T07:00:00Z")
+    data = client.read(["TEMP_201"], start="2025-06-20T06:00:00Z", end="2025-06-20T07:00:00Z")
     # Queries 08:00-09:00 server time; timestamps come back as "...+02:00"
 ```
 
@@ -933,7 +933,7 @@ try:
         datasource="IP21"
     ) as client:
         df = client.read(
-            ["ATI111"],
+            ["TEMP_201"],
             start="2025-06-20 08:00:00",
             end="2025-06-20 09:00:00",
             output=OutputFormat.DATAFRAME,

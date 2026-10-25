@@ -3,7 +3,7 @@
 Reads connection settings from .env in the project root, the same way as
 examples/basic_usage.py (see .env.example). The first tag in ASPEN_TEST_TAGS
 is used for the read checks; the last one for the aggregate checks (use a numeric tag,
-e.g. ASPEN_TEST_TAGS=GXV1255.PV,CTI4551.PV).
+e.g. ASPEN_TEST_TAGS=VALVE_1.PV,TAG5.PV).
 
 The retry checks put a transport in front of the server that fails the first requests
 (HTTP 503 or a connection error) before forwarding the rest, so the server only ever

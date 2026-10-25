@@ -30,8 +30,8 @@ def _first_not_none(record: dict, *keys: str) -> Any:
 def _tag_key(name: object) -> str:
     """Return the key matching a response tag name to a requested one.
 
-    IP.21 tag names are case-insensitive: a query for 'gtime.pv' returns rows named
-    'GTIME.PV'. Results are keyed by the name as requested.
+    IP.21 tag names are case-insensitive: a query for 'tag1.pv' returns rows named
+    'TAG1.PV'. Results are keyed by the name as requested.
     """
     return str(name).upper()
 

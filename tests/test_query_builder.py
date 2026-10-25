@@ -7,7 +7,7 @@ from aspy21.query_builder import SqlHistoryQueryBuilder, SqlSnapshotQueryBuilder
 def test_build_snapshot_sql_query_multiple_tags():
     builder = SqlSnapshotQueryBuilder()
     xml = builder.build(
-        tags=["GXV1255.PV", "GP901.PV"],
+        tags=["VALVE_1.PV", "PRESS_1.PV"],
         datasource="IP21",
         with_description=False,
     )
@@ -18,7 +18,7 @@ def test_build_snapshot_sql_query_multiple_tags():
     assert 'm="2"' in xml
     expected_query = (
         "Select name, name->ip_input_value, name->ip_input_quality from all_records "
-        "where name in ('GXV1255.PV', 'GP901.PV')"
+        "where name in ('VALVE_1.PV', 'PRESS_1.PV')"
     )
     assert expected_query in xml
 
@@ -26,14 +26,14 @@ def test_build_snapshot_sql_query_multiple_tags():
 def test_build_snapshot_sql_query_with_description_single_tag():
     builder = SqlSnapshotQueryBuilder()
     xml = builder.build(
-        tags="73_V101.PHASE",
+        tags="REACTOR_1.PHASE",
         datasource="PLANT",
         with_description=True,
     )
 
     expected_query = (
         "Select name, name->ip_description, name->ip_input_value, name->ip_input_quality "
-        "from all_records where name in ('73_V101.PHASE')"
+        "from all_records where name in ('REACTOR_1.PHASE')"
     )
     assert expected_query in xml
     assert 'ds="PLANT"' in xml

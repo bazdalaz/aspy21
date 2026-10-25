@@ -14,8 +14,8 @@ def test_read_basic(mock_api):
         return_value=httpx.Response(
             200,
             json=[
-                {"ts": "2025-06-20T08:00:00.000000Z", "name": "ATI111", "value": 3.0},
-                {"ts": "2025-06-20T09:00:00.000000Z", "name": "ATI111", "value": 3.5},
+                {"ts": "2025-06-20T08:00:00.000000Z", "name": "TEMP_201", "value": 3.0},
+                {"ts": "2025-06-20T09:00:00.000000Z", "name": "TEMP_201", "value": 3.5},
             ],
         )
     )
@@ -28,7 +28,7 @@ def test_read_basic(mock_api):
     )
 
     df = c.read(
-        ["ATI111"],
+        ["TEMP_201"],
         start="2025-06-20 08:00:00",
         end="2025-06-20 09:00:00",
         interval=600,
@@ -36,7 +36,7 @@ def test_read_basic(mock_api):
         output=OutputFormat.DATAFRAME,
     )
     assert isinstance(df, pd.DataFrame)
-    assert "ATI111" in df.columns
+    assert "TEMP_201" in df.columns
     assert df.shape[0] == 2
     c.close()
 
@@ -125,12 +125,12 @@ def test_snapshot_read_uses_sql(mock_api, monkeypatch):
             200,
             json=[
                 {
-                    "name": "GXV1255.PV",
+                    "name": "VALVE_1.PV",
                     "name->ip_description": "Level Indicator",
                     "name->ip_input_value": 12.5,
                 },
                 {
-                    "name": "GP901.PV",
+                    "name": "PRESS_1.PV",
                     "name->ip_description": "Pump Speed",
                     "name->ip_input_value": 74.0,
                 },
@@ -149,7 +149,7 @@ def test_snapshot_read_uses_sql(mock_api, monkeypatch):
     )
 
     df = c.read(
-        tags=["GXV1255.PV", "GP901.PV"],
+        tags=["VALVE_1.PV", "PRESS_1.PV"],
         start=None,
         end=None,
         read_type=ReaderType.SNAPSHOT,
@@ -164,10 +164,10 @@ def test_snapshot_read_uses_sql(mock_api, monkeypatch):
     request_body = route.calls.last.request.content.decode("utf-8")
     assert (
         "Select name, name->ip_description, name->ip_input_value, name->ip_input_quality "
-        "from all_records where name in ('GXV1255.PV', 'GP901.PV')"
+        "from all_records where name in ('VALVE_1.PV', 'PRESS_1.PV')"
     ) in request_body
-    assert df.loc[frozen_time, "GXV1255.PV"] == 12.5
-    assert df.loc[frozen_time, "GP901.PV"] == 74.0
+    assert df.loc[frozen_time, "VALVE_1.PV"] == 12.5
+    assert df.loc[frozen_time, "PRESS_1.PV"] == 74.0
     c.close()
 
 
