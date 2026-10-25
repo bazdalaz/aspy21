@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Tags requested in a different letter case than IP.21 stores them (e.g. `gtime.pv` for
+  `GTIME.PV`) returned no data, with a "No data in SQL response" warning. IP.21 matches tag
+  names regardless of case and returns the stored name, which the response parsers
+  compared exactly. They now ignore case; columns, JSON `tag` fields and descriptions use
+  the name as requested
+
 ## [0.0.10] - 2026-10-24
 
 **Multi-tag read release** - Reads of several tags return every value: `limit` applies to

@@ -27,6 +27,15 @@ def _first_not_none(record: dict, *keys: str) -> Any:
     return None
 
 
+def _tag_key(name: object) -> str:
+    """Return the key matching a response tag name to a requested one.
+
+    IP.21 tag names are case-insensitive: a query for 'gtime.pv' returns rows named
+    'GTIME.PV'. Results are keyed by the name as requested.
+    """
+    return str(name).upper()
+
+
 class ResponseParser(ABC):  # noqa: B024
     """Abstract base class for response parsing strategies.
 
@@ -72,9 +81,10 @@ class SqlSnapshotResponseParser(ResponseParser):
         descriptions: dict[str, str] = {}
         status_map: dict[str, object] = {}
 
+        requested = {_tag_key(name): name for name in tag_names}
         for record in response:
-            tag_name = record.get("name")
-            if not tag_name or tag_name not in tag_names:
+            tag_name = requested.get(_tag_key(record.get("name")))
+            if not tag_name:
                 continue
 
             # Extract value
@@ -146,17 +156,23 @@ class SqlHistoryResponseParser(ResponseParser):
             tag_name = record.get("name")
             if not tag_name:
                 continue
+            key = _tag_key(tag_name)
 
-            tag_records[tag_name].append(record)
+            tag_records[key].append(record)
 
             # Extract description from first record of each tag
-            if tag_name not in tag_descriptions and "name->ip_description" in record:
-                tag_descriptions[tag_name] = record["name->ip_description"] or ""
+            if key not in tag_descriptions and "name->ip_description" in record:
+                tag_descriptions[key] = record["name->ip_description"] or ""
 
         # Build DataFrame for each tag
         frames = []
+        descriptions = {
+            name: tag_descriptions[_tag_key(name)]
+            for name in tag_names
+            if _tag_key(name) in tag_descriptions
+        }
         for tag_name in tag_names:
-            records = tag_records.get(tag_name, [])
+            records = tag_records.get(_tag_key(tag_name), [])
 
             if not records:
                 if warn_missing:
@@ -186,7 +202,7 @@ class SqlHistoryResponseParser(ResponseParser):
                 frames.append(df)
                 logger.debug(f"Parsed {len(df)} data points for tag {tag_name}")
 
-        return frames, tag_descriptions
+        return frames, descriptions
 
 
 class SqlAggregatesResponseParser(ResponseParser):
@@ -311,13 +327,14 @@ class SqlAggregatesResponseParser(ResponseParser):
             if not tag_name:
                 unnamed.append(record)
                 continue
+            key = _tag_key(tag_name)
 
-            tag_records[tag_name].append(record)
+            tag_records[key].append(record)
 
             # Extract description if available
             desc_field = record.get("name->ip_description") or record.get("ip_description")
-            if tag_name not in tag_descriptions and desc_field:
-                tag_descriptions[tag_name] = desc_field or ""
+            if key not in tag_descriptions and desc_field:
+                tag_descriptions[key] = desc_field or ""
 
         if unnamed:
             logger.warning(
@@ -328,8 +345,13 @@ class SqlAggregatesResponseParser(ResponseParser):
 
         # Build DataFrame for each tag
         frames = []
+        descriptions = {
+            name: tag_descriptions[_tag_key(name)]
+            for name in tag_names
+            if _tag_key(name) in tag_descriptions
+        }
         for tag_name in tag_names:
-            records_for_tag = tag_records.get(tag_name, [])
+            records_for_tag = tag_records.get(_tag_key(tag_name), [])
 
             if not records_for_tag:
                 logger.warning(f"No data in SQL aggregates response for tag {tag_name}")
@@ -378,4 +400,4 @@ class SqlAggregatesResponseParser(ResponseParser):
                 logger.warning(f"No valid rows extracted for tag {tag_name}")
 
         logger.debug(f"Parsed {len(frames)} DataFrame(s) from aggregates response")
-        return frames, tag_descriptions
+        return frames, descriptions
