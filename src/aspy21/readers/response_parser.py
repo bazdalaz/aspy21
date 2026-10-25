@@ -14,6 +14,7 @@ from typing import Any
 import pandas as pd
 
 from ..errors import AspenSqlError
+from ..utils import tag_key
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +26,6 @@ def _first_not_none(record: dict, *keys: str) -> Any:
         if value is not None:
             return value
     return None
-
-
-def _tag_key(name: object) -> str:
-    """Return the key matching a response tag name to a requested one.
-
-    IP.21 tag names are case-insensitive: a query for 'tag1.pv' returns rows named
-    'TAG1.PV'. Results are keyed by the name as requested.
-    """
-    return str(name).upper()
 
 
 class ResponseParser(ABC):  # noqa: B024
@@ -81,9 +73,9 @@ class SqlSnapshotResponseParser(ResponseParser):
         descriptions: dict[str, str] = {}
         status_map: dict[str, object] = {}
 
-        requested = {_tag_key(name): name for name in tag_names}
+        requested = {tag_key(name): name for name in tag_names}
         for record in response:
-            tag_name = requested.get(_tag_key(record.get("name")))
+            tag_name = requested.get(tag_key(record.get("name")))
             if not tag_name:
                 continue
 
@@ -156,7 +148,7 @@ class SqlHistoryResponseParser(ResponseParser):
             tag_name = record.get("name")
             if not tag_name:
                 continue
-            key = _tag_key(tag_name)
+            key = tag_key(tag_name)
 
             tag_records[key].append(record)
 
@@ -167,12 +159,12 @@ class SqlHistoryResponseParser(ResponseParser):
         # Build DataFrame for each tag
         frames = []
         descriptions = {
-            name: tag_descriptions[_tag_key(name)]
+            name: tag_descriptions[tag_key(name)]
             for name in tag_names
-            if _tag_key(name) in tag_descriptions
+            if tag_key(name) in tag_descriptions
         }
         for tag_name in tag_names:
-            records = tag_records.get(_tag_key(tag_name), [])
+            records = tag_records.get(tag_key(tag_name), [])
 
             if not records:
                 if warn_missing:
@@ -327,7 +319,7 @@ class SqlAggregatesResponseParser(ResponseParser):
             if not tag_name:
                 unnamed.append(record)
                 continue
-            key = _tag_key(tag_name)
+            key = tag_key(tag_name)
 
             tag_records[key].append(record)
 
@@ -346,12 +338,12 @@ class SqlAggregatesResponseParser(ResponseParser):
         # Build DataFrame for each tag
         frames = []
         descriptions = {
-            name: tag_descriptions[_tag_key(name)]
+            name: tag_descriptions[tag_key(name)]
             for name in tag_names
-            if _tag_key(name) in tag_descriptions
+            if tag_key(name) in tag_descriptions
         }
         for tag_name in tag_names:
-            records_for_tag = tag_records.get(_tag_key(tag_name), [])
+            records_for_tag = tag_records.get(tag_key(tag_name), [])
 
             if not records_for_tag:
                 logger.warning(f"No data in SQL aggregates response for tag {tag_name}")

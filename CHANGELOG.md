@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `invalidate_cache(tags=...)` ignores the letter case of tag names, as `read()` does
+  since 0.0.11: `invalidate_cache(tags=["TAG1.PV"])` also removes a cached read of
+  `tag1.pv`
+
 ## [0.0.12] - 2026-10-25
 
 **Documentation release** - No code changes.

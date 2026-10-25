@@ -15,7 +15,7 @@ from .errors import AspenBrowseError, raise_for_sql_error
 from .models import IncludeFields, OutputFormat, ReaderType
 from .query_builder import SqlSearchQueryBuilder
 from .retry import send
-from .utils import check_timezone, localize_server_index, server_now, to_server_time
+from .utils import check_timezone, localize_server_index, server_now, tag_key, to_server_time
 
 if TYPE_CHECKING:
     from datetime import tzinfo
@@ -355,7 +355,8 @@ class AspenClient:
         any string accepted by read() for the same instant matches.
 
         Args:
-            tags: Tag names to invalidate. If None, entries for any tags match.
+            tags: Tag names to invalidate, in any letter case. If None, entries for any
+                tags match.
             start: Start timestamp to match. If None, any start matches.
             end: End timestamp to match. If None, any end matches.
 
@@ -369,7 +370,8 @@ class AspenClient:
             return self._cache.invalidate()
 
         identity = self._client_cache_identity()
-        tag_set = set(tags) if tags is not None else None
+        # Tag names are case-insensitive, as in read()
+        tag_set = {tag_key(tag) for tag in tags} if tags is not None else None
         start = to_server_time(start, self.server_timezone).isoformat() if start else None
         end = to_server_time(end, self.server_timezone).isoformat() if end else None
 
@@ -382,7 +384,7 @@ class AspenClient:
                 cached_tags = params.get("tags")
                 if not isinstance(cached_tags, str):
                     return False
-                if not tag_set.intersection(json.loads(cached_tags)):
+                if not tag_set.intersection(tag_key(tag) for tag in json.loads(cached_tags)):
                     return False
             if start is not None and params.get("start") != start:
                 return False

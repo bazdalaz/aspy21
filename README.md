@@ -532,8 +532,8 @@ count = client.invalidate_cache(
 count = client.invalidate_cache(tags=["TAG1"])
 ```
 
-A cached read is removed when it includes any of the given tags and its start and end
-match. Only reads from this client's server and datasource are affected; search results
+A cached read is removed when it includes any of the given tags (in any letter case, as in
+`read()`) and its start and end match. Only reads from this client's server and datasource are affected; search results
 are kept.
 
 ### Performance
