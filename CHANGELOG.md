@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.12] - 2026-10-25
+
+**Documentation release** - No code changes.
+
 ### Documentation
 - README and the `read()` docstring say that tag names are case-insensitive and that
   results use the names as given
+- Examples, tests and docstrings use generic tag names (`TAG1.PV`, `TEMP_201`, ...)
 
 ## [0.0.11] - 2026-10-25
 
@@ -341,7 +346,8 @@ pip install aspy21
 
 This is the first stable release. The API is considered stable and follows semantic versioning. Breaking changes will only occur in major version updates (e.g., 1.0.0).
 
-[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.11...HEAD
+[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.12...HEAD
+[0.0.12]: https://github.com/bazdalaz/aspy21/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/bazdalaz/aspy21/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/bazdalaz/aspy21/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/bazdalaz/aspy21/compare/v0.0.8...v0.0.9
