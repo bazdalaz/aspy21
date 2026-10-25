@@ -83,7 +83,7 @@ def main() -> None:
         datasource=datasource,
         auth=(username, password) if username and password else None,
         server_timezone=os.getenv("ASPEN_SERVER_TIMEZONE") or None,
-        verify_ssl=os.getenv("ASPEN_VERIFY_SSL", "False").lower() == "true",
+        verify_ssl=os.getenv("ASPEN_VERIFY_SSL", "True").lower() == "true",
     ) as client:
         print("\n=== 1. Values per tag, one tag per read, no limit (reference)")
         reference = {tag: counts(client, [tag], span)[tag] for tag in tags}

@@ -118,7 +118,9 @@ class AggregatesReader(BaseReader):
 
         response = self._post_sql(xml_query)
         logger.debug(f"Response status: {response.status_code}")
-        logger.debug(f"Response content (first 500 chars): {response.text[:500]}")
+        if logger.isEnabledFor(logging.DEBUG):
+            # Only decode the body for the log when it is written
+            logger.debug(f"Response content (first 500 chars): {response.text[:500]}")
 
         try:
             response_data = response.json()

@@ -145,6 +145,29 @@ class TestAspenCache:
         assert cache.get("test", key=3) == "value3"  # Still there
         assert cache.get("test", key=4) == "value4"  # New entry
 
+    def test_eviction_keeps_recently_used(self):
+        """A cache hit makes an entry the most recently used, so it is evicted last."""
+        cache = AspenCache(CacheConfig(max_size=3))
+        for key in (1, 2, 3):
+            cache.set("test", f"value{key}", key=key)
+
+        assert cache.get("test", key=1) == "value1"  # 2 is now least recently used
+        cache.set("test", "value4", key=4)
+
+        assert cache.get("test", key=2) is None
+        assert cache.get("test", key=1) == "value1"
+
+    def test_replacing_entry_does_not_evict(self):
+        """Setting an existing key in a full cache replaces it without evicting another."""
+        cache = AspenCache(CacheConfig(max_size=2))
+        cache.set("test", "value1", key=1)
+        cache.set("test", "value2", key=2)
+
+        cache.set("test", "new1", key=1)
+
+        assert cache.get("test", key=1) == "new1"
+        assert cache.get("test", key=2) == "value2"
+
     def test_cache_invalidate_all(self):
         """Test invalidating entire cache."""
         cache = AspenCache()
@@ -297,14 +320,18 @@ class TestCacheCopies:
         first = cache.get("test", key=1)
         assert isinstance(first, pd.DataFrame)
         first.loc[0, "a"] = 99
-        pd.testing.assert_frame_equal(cache.get("test", key=1), pd.DataFrame({"a": [1, 2]}))
+        cached = cache.get("test", key=1)
+        assert isinstance(cached, pd.DataFrame)
+        pd.testing.assert_frame_equal(cached, pd.DataFrame({"a": [1, 2]}))
 
     def test_set_stores_copy_of_dataframe(self):
         cache = AspenCache()
         df = pd.DataFrame({"a": [1, 2]})
         cache.set("test", df, key=1)
         df.loc[0, "a"] = 99
-        pd.testing.assert_frame_equal(cache.get("test", key=1), pd.DataFrame({"a": [1, 2]}))
+        cached = cache.get("test", key=1)
+        assert isinstance(cached, pd.DataFrame)
+        pd.testing.assert_frame_equal(cached, pd.DataFrame({"a": [1, 2]}))
 
     def test_get_returns_deep_copy_of_records(self):
         cache = AspenCache()

@@ -59,7 +59,7 @@ python examples/basic_usage.py
 - `ASPEN_PASSWORD` - Password for authentication
 - `ASPEN_DATASOURCE` - Datasource name (optional, uses server default if empty)
 - `ASPEN_TIMEOUT` - Request timeout in seconds (default: 60.0)
-- `ASPEN_VERIFY_SSL` - SSL certificate verification (default: False)
+- `ASPEN_VERIFY_SSL` - SSL certificate verification (default: True)
 - `ASPEN_LOG_LEVEL` - Logging level (INFO, DEBUG, etc.)
 - `ASPEN_TEST_TAGS` - Comma-separated list of tag names to read
 

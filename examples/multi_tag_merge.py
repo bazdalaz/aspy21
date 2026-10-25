@@ -118,7 +118,7 @@ def live_read(base_url: str, tags: list[str], start: str, end: str) -> tuple[pd.
         datasource=os.getenv("ASPEN_DATASOURCE") or None,
         auth=(username, password) if username and password else None,
         server_timezone=os.getenv("ASPEN_SERVER_TIMEZONE") or None,
-        verify_ssl=os.getenv("ASPEN_VERIFY_SSL", "False").lower() == "true",
+        verify_ssl=os.getenv("ASPEN_VERIFY_SSL", "True").lower() == "true",
     ) as client:
         df = client.read(
             tags, start=start, end=end, read_type=ReaderType.RAW, output=OutputFormat.DATAFRAME

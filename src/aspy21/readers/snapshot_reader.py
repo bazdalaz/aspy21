@@ -95,7 +95,7 @@ class SnapshotReader(BaseReader):
         snapshot_time = server_now(self.server_timezone)
 
         # IP.21 returns an empty body when none of the requested tags exist
-        if not response.text or response.headers.get("content-length") == "0":
+        if not response.content or response.headers.get("content-length") == "0":
             logger.warning("Snapshot SQL endpoint returned empty response (unknown tags?)")
             return [], {}
 

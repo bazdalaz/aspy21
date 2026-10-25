@@ -418,7 +418,7 @@ with AspenClient(
 ### Overview
 
 An optional in-memory cache returns repeated reads of past data without a server
-round trip. It uses TTL (Time-To-Live) expiry with eviction of the oldest entries, and is
+round trip. It uses TTL (Time-To-Live) expiry with eviction of the least recently used entries, and is
 thread-safe. It is off by default.
 
 ### What Is Cached
@@ -573,7 +573,7 @@ with AspenClient(base_url=url, auth=auth, datasource="IP21", cache=True) as clie
 - Can be safely used in multi-threaded applications
 
 **Memory Management:**
-- The oldest entry is evicted when `max_size` is reached
+- The least recently used entry is evicted when `max_size` is reached
 - Automatic cleanup of expired entries
 - Configurable size limits prevent memory issues
 

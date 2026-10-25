@@ -28,6 +28,17 @@ def _first_not_none(record: dict, *keys: str) -> Any:
     return None
 
 
+def _to_datetimes(values: list) -> pd.DatetimeIndex | list:
+    """Parse response timestamps in one call (parsing them one by one is far slower).
+
+    IP.21 returns ISO 8601 timestamps; any other format falls back to parsing each value.
+    """
+    try:
+        return pd.to_datetime(values, format="ISO8601")
+    except (ValueError, TypeError):
+        return [pd.to_datetime(value) for value in values]
+
+
 class ResponseParser(ABC):  # noqa: B024
     """Abstract base class for response parsing strategies.
 
@@ -172,27 +183,21 @@ class SqlHistoryResponseParser(ResponseParser):
                 continue
 
             # Build DataFrame from records
-            rows = []
-            for record in records:
-                timestamp = pd.to_datetime(record["ts"])
-                value = record["value"]
-                row = {"time": timestamp, tag_name: value}
+            columns = {
+                "time": _to_datetimes([record["ts"] for record in records]),
+                tag_name: [record["value"] for record in records],
+            }
+            # Include status if present in response (NaN for records without one)
+            if include_status and any("status" in record for record in records):
+                columns[f"{tag_name}_status"] = [
+                    record.get("status", float("nan")) for record in records
+                ]
 
-                # Include status if present in response
-                if include_status and "status" in record:
-                    row["status"] = record["status"]
-
-                rows.append(row)
-
-            if rows:
-                df = pd.DataFrame(rows)
-                df = df.set_index("time")
-                if max_rows > 0:
-                    df = df.iloc[:max_rows]
-                if include_status and "status" in df.columns:
-                    df = df.rename(columns={"status": f"{tag_name}_status"})
-                frames.append(df)
-                logger.debug(f"Parsed {len(df)} data points for tag {tag_name}")
+            df = pd.DataFrame(columns).set_index("time")
+            if max_rows > 0:
+                df = df.iloc[:max_rows]
+            frames.append(df)
+            logger.debug(f"Parsed {len(df)} data points for tag {tag_name}")
 
         return frames, descriptions
 
@@ -350,7 +355,8 @@ class SqlAggregatesResponseParser(ResponseParser):
                 continue
 
             # Build DataFrame from records
-            rows = []
+            timestamps = []
+            values = []
             no_timestamp = 0
             no_value: list[str] = []  # field names of the first record without a value
             no_value_count = 0
@@ -361,8 +367,6 @@ class SqlAggregatesResponseParser(ResponseParser):
                     no_timestamp += 1
                     continue
 
-                timestamp = pd.to_datetime(ts_value)
-
                 # Value column might have prefix
                 value = _first_not_none(record, value_column, f"ip_{value_column}")
                 if value is None:
@@ -370,8 +374,8 @@ class SqlAggregatesResponseParser(ResponseParser):
                     no_value = no_value or list(record.keys())
                     continue
 
-                row = {"time": timestamp, tag_name: value}
-                rows.append(row)
+                timestamps.append(ts_value)
+                values.append(value)
 
             if no_timestamp:
                 logger.warning(f"Skipped {no_timestamp} record(s) without timestamp for {tag_name}")
@@ -381,8 +385,8 @@ class SqlAggregatesResponseParser(ResponseParser):
                     f"for {tag_name}, e.g. fields {no_value}"
                 )
 
-            if rows:
-                df = pd.DataFrame(rows)
+            if values:
+                df = pd.DataFrame({"time": _to_datetimes(timestamps), tag_name: values})
                 df = df.set_index("time")
                 if max_rows > 0:
                     df = df.iloc[:max_rows]
