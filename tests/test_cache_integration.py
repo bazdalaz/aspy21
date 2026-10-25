@@ -872,6 +872,15 @@ class TestInvalidateCache:
         assert len(mock_api.calls) == 3
 
     @respx.mock
+    @pytest.mark.parametrize(("cached", "invalidated"), [("tag1", "TAG1"), ("TAG1", "Tag1")])
+    def test_tag_case_ignored(self, mock_api, cached, invalidated):
+        """Tag names are case-insensitive in IP.21, so also when invalidating."""
+        _mock_sql(mock_api)
+        with _client() as client:
+            self._fill(client, [cached], ["TAG2"])
+            assert client.invalidate_cache(tags=[invalidated]) == 1
+
+    @respx.mock
     def test_entry_with_any_matching_tag_removed(self, mock_api):
         _mock_sql(mock_api)
         with _client() as client:

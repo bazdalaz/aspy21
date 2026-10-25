@@ -31,6 +31,15 @@ def chunked(iterable: Iterable[T], size: int) -> Iterable[list[T]]:
         yield batch
 
 
+def tag_key(name: object) -> str:
+    """Return the key that tells whether two tag names refer to the same tag.
+
+    IP.21 tag names are case-insensitive: a query for 'tag1.pv' returns rows named
+    'TAG1.PV'. Used to match response rows and cached reads to requested tag names.
+    """
+    return str(name).upper()
+
+
 # IP.21 interprets query timestamps as the server's local wall-clock time, and the REST API
 # returns local wall-clock times labelled "Z" (UTC). These helpers keep everything in server
 # local time; server_tz attaches the real zone when the caller knows it.
