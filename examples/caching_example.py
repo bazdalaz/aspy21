@@ -52,7 +52,7 @@ with AspenClient(
     print("First read (cache miss, hits API)...")
     start_time = time.time()
     data1 = client.read(
-        ["GTI118.PV"],
+        ["TAG3.PV"],
         start="2025-01-01 08:00:00",
         end="2025-01-01 09:00:00",
         output=OutputFormat.JSON,
@@ -72,7 +72,7 @@ with AspenClient(
     print("\nSecond read with same parameters (cache hit)...")
     start_time = time.time()
     data2 = client.read(
-        ["GTI118.PV"],
+        ["TAG3.PV"],
         start="2025-01-01 08:00:00",
         end="2025-01-01 09:00:00",
         output=OutputFormat.JSON,
@@ -149,8 +149,8 @@ with AspenClient(
 ) as client:
     # Make some requests to populate cache
     print("Populating cache with multiple operations...")
-    client.read(["GTI118.PV"], start="2025-01-01 08:00:00", end="2025-01-01 09:00:00")
-    client.read(["GTI119.PV"], start="2025-01-01 08:00:00", end="2025-01-01 09:00:00")
+    client.read(["TAG3.PV"], start="2025-01-01 08:00:00", end="2025-01-01 09:00:00")
+    client.read(["TAG4.PV"], start="2025-01-01 08:00:00", end="2025-01-01 09:00:00")
     tags = client.search("GTI*", limit=5)
 
     # Check cache stats
@@ -191,7 +191,7 @@ with AspenClient(
     # First request - hits API
     print("First request (from API)...")
     data_from_api = client.read(
-        ["GTI118.PV"],
+        ["TAG3.PV"],
         start="2025-01-01 10:00:00",
         end="2025-01-01 11:00:00",
         output=OutputFormat.JSON,
@@ -203,7 +203,7 @@ with AspenClient(
     # Second request - from cache
     print("\nSecond request (from cache)...")
     data_from_cache = client.read(
-        ["GTI118.PV"],
+        ["TAG3.PV"],
         start="2025-01-01 10:00:00",
         end="2025-01-01 11:00:00",
         output=OutputFormat.JSON,
@@ -243,7 +243,7 @@ with AspenClient(
     # Read historical data (will be cached with long TTL - 24h)
     print("Reading historical data (2025-01-01, cached for 24 hours)...")
     client.read(
-        ["GTI118.PV"],
+        ["TAG3.PV"],
         start="2025-01-01 08:00:00",
         end="2025-01-01 09:00:00",
     )

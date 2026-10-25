@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+- README and the `read()` docstring say that tag names are case-insensitive and that
+  results use the names as given
+
 ## [0.0.11] - 2026-10-25
 
 ### Fixed
-- Tags requested in a different letter case than IP.21 stores them (e.g. `gtime.pv` for
-  `GTIME.PV`) returned no data, with a "No data in SQL response" warning. IP.21 matches tag
+- Tags requested in a different letter case than IP.21 stores them (e.g. `tag1.pv` for
+  `TAG1.PV`) returned no data, with a "No data in SQL response" warning. IP.21 matches tag
   names regardless of case and returns the stored name, which the response parsers
   compared exactly. They now ignore case; columns, JSON `tag` fields and descriptions use
   the name as requested

@@ -447,7 +447,8 @@ class AspenClient:
         """Read process data for multiple tags.
 
         Args:
-            tags: List of tag names to retrieve
+            tags: List of tag names to retrieve. Case does not matter, as in IP.21; results
+                use the names as given here.
             start: Start timestamp (ISO format or compatible string). If start and end are
                 both omitted, the current values are read (SNAPSHOT). Naive values are server
                 local time; timezone-aware values are converted (see server_timezone).
@@ -503,18 +504,18 @@ class AspenClient:
         Example:
             >>> # JSON output (default)
             >>> data = client.read(
-            ...     ["ATI111"],
+            ...     ["TEMP_201"],
             ...     start="2025-01-01 00:00:00",
             ...     end="2025-01-01 01:00:00",
             ... )
             >>> # Returns: [
-            >>> #   {"timestamp": "2025-01-01T00:00:00", "tag": "ATI111", "value": 25.5},
+            >>> #   {"timestamp": "2025-01-01T00:00:00", "tag": "TEMP_201", "value": 25.5},
             >>> #   ...
             >>> # ]
 
             >>> # 10-minute averages as a DataFrame with descriptions
             >>> df = client.read(
-            ...     ["ATI111", "AP101.PV"],
+            ...     ["TEMP_201", "PRESS_201.PV"],
             ...     start="2025-01-01 00:00:00",
             ...     end="2025-01-01 01:00:00",
             ...     interval=600,
