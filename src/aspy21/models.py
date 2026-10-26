@@ -1,9 +1,9 @@
 """Data models for Aspen InfoPlus.21 client."""
 
-from enum import Enum
+from enum import StrEnum
 
 
-class ReaderType(str, Enum):
+class ReaderType(StrEnum):
     """Reader types for Aspen IP.21 data retrieval.
 
     Attributes:
@@ -25,7 +25,7 @@ class ReaderType(str, Enum):
     RNG = "RNG"
 
 
-class IncludeFields(str, Enum):
+class IncludeFields(StrEnum):
     """Field inclusion options for read/search operations.
 
     Attributes:
@@ -41,7 +41,7 @@ class IncludeFields(str, Enum):
     ALL = "ALL"
 
 
-class OutputFormat(str, Enum):
+class OutputFormat(StrEnum):
     """Output format options for read/search operations.
 
     Attributes:

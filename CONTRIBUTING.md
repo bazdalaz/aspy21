@@ -36,7 +36,7 @@ Look for issues labeled `good-first-issue` or `help-wanted` in our [issue tracke
 
 ### Prerequisites
 
-- Python 3.9 or higher
+- Python 3.11 or higher
 - [uv](https://github.com/astral-sh/uv) package manager (recommended)
 - [just](https://just.systems/) task runner (optional but recommended)
 - Git
@@ -59,13 +59,13 @@ Look for issues labeled `good-first-issue` or `help-wanted` in our [issue tracke
 3. **Create a virtual environment and install dependencies**
 
    ```bash
-   # Using uv (recommended)
-   uv pip install -e ".[dev]"
+   # Using uv (recommended): creates .venv with the versions in uv.lock
+   uv sync --all-extras
 
-   # Or using standard pip
+   # Or using standard pip (25.1 or newer, for --group)
    python -m venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   pip install -e ".[dev]"
+   pip install -e ".[examples]" --group dev
    ```
 
 4. **Install pre-commit hooks**
@@ -284,21 +284,28 @@ Before requesting review, ensure:
 - [ ] Commit messages are clear
 - [ ] PR description is complete
 
+## Versioning
+
+aspy21 follows [Semantic Versioning](https://semver.org/) for a 0.x project:
+
+- **0.MINOR** (0.1.0 -> 0.2.0): breaking changes and new features
+- **PATCH** (0.1.0 -> 0.1.1): fixes only; safe to take with `aspy21~=0.1.0`
+- **1.0.0**: once the public API is frozen; after that, breaking changes need a major version
+
 ## Release Process
 
-Releases are automated via GitHub Actions:
+The version comes from the git tag (setuptools-scm); there is no version to edit in files.
 
-1. Update version in `pyproject.toml`
-2. Update `CHANGELOG.md`
-3. Create and push a git tag:
+1. Move the `[Unreleased]` entries in `CHANGELOG.md` under the new version and update the
+   compare links at the bottom
+2. Merge to `main` with CI passing (the release workflow does not run the tests)
+3. Create and push a tag:
    ```bash
-   git tag v0.2.0
+   git tag -a v0.2.0 -m "Release v0.2.0"
    git push origin v0.2.0
    ```
-4. GitHub Actions will automatically:
-   - Run all tests
-   - Build distribution packages
-   - Publish to PyPI
+4. GitHub Actions builds the distribution packages and publishes them to PyPI. Pushing the tag
+   publishes the release; a version cannot be uploaded to PyPI twice
 
 ## Getting Help
 

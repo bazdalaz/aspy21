@@ -19,7 +19,7 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -153,7 +153,7 @@ def timezone_diagnostics(client: AspenClient) -> None:
     now = datetime.now().astimezone()
     print("Timezone diagnostics")
     print(f"  local now: {now.isoformat()} ({now.tzname()})")
-    print(f"  utc now:   {now.astimezone(timezone.utc).isoformat()}")
+    print(f"  utc now:   {now.astimezone(UTC).isoformat()}")
     w_start = query_builder.sql_timestamp(str(start))
     w_end = query_builder.sql_timestamp(str(start + timedelta(minutes=10)))
     window = f"ts between '{w_start}' and '{w_end}'"
