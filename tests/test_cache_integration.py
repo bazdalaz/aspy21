@@ -818,7 +818,7 @@ class TestCachedResultsAreCopies:
             client.read(["TAG1"], start=START, end=END, output=OutputFormat.DATAFRAME)
             hit = client.read(["TAG1"], start=START, end=END, output=OutputFormat.DATAFRAME)
             assert isinstance(hit, pd.DataFrame)
-            hit.drop(columns="TAG1", inplace=True)
+            del hit["TAG1"]  # modify the returned frame in place
             again = client.read(["TAG1"], start=START, end=END, output=OutputFormat.DATAFRAME)
 
         assert isinstance(again, pd.DataFrame)

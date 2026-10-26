@@ -143,6 +143,48 @@ class TestSqlHistoryResponseParser:
         # Should return frames for tags that have data
         assert len(frames) <= 3
 
+    def test_iso_timestamps_parsed_like_single_values(self):
+        """Timestamps parsed together equal each one parsed on its own."""
+        stamps = ["2025-01-01T00:00:00Z", "2025-01-01T00:00:10.5Z"]
+        frames, _ = SqlHistoryResponseParser().parse(
+            response=[{"ts": ts, "name": "TAG1", "value": 1.0} for ts in stamps],
+            tag_names=["TAG1"],
+            include_status=False,
+            max_rows=1000,
+        )
+        assert list(frames[0].index) == [pd.to_datetime(ts) for ts in stamps]
+
+    def test_non_iso_timestamps_parsed_one_by_one(self):
+        """Timestamps that are not all ISO 8601 still parse."""
+        frames, _ = SqlHistoryResponseParser().parse(
+            response=[
+                {"ts": "2025-01-01T00:00:00", "name": "TAG1", "value": 1.0},
+                {"ts": "01-Jan-25 00:00:10", "name": "TAG1", "value": 2.0},
+            ],
+            tag_names=["TAG1"],
+            include_status=False,
+            max_rows=1000,
+        )
+        assert list(frames[0].index) == [
+            pd.Timestamp("2025-01-01 00:00:00"),
+            pd.Timestamp("2025-01-01 00:00:10"),
+        ]
+
+    def test_status_missing_on_some_records(self):
+        """Records without a status get NaN in the status column."""
+        frames, _ = SqlHistoryResponseParser().parse(
+            response=[
+                {"ts": "2025-01-01T00:00:00Z", "name": "TAG1", "value": 1.0, "status": 0},
+                {"ts": "2025-01-01T00:00:10Z", "name": "TAG1", "value": 2.0},
+            ],
+            tag_names=["TAG1"],
+            include_status=True,
+            max_rows=1000,
+        )
+        status = frames[0]["TAG1_status"]
+        assert status.iloc[0] == 0
+        assert pd.isna(status.iloc[1])
+
 
 class TestSqlAggregatesResponseParser:
     """Tests for SqlAggregatesResponseParser - most critical for coverage."""

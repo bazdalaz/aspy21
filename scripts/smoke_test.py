@@ -61,7 +61,7 @@ password = os.getenv("ASPEN_PASSWORD")
 datasource = os.getenv("ASPEN_DATASOURCE", "")
 timeout = float(os.getenv("ASPEN_TIMEOUT", "60.0"))
 test_tags = [t.strip() for t in os.getenv("ASPEN_TEST_TAGS", "").split(",") if t.strip()]
-verify_ssl = os.getenv("ASPEN_VERIFY_SSL", "False").lower() == "true"
+verify_ssl = os.getenv("ASPEN_VERIFY_SSL", "True").lower() == "true"
 server_timezone = os.getenv("ASPEN_SERVER_TIMEZONE") or None
 
 # Validate required variables

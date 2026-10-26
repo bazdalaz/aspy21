@@ -136,9 +136,13 @@ class SqlHistoryReader(BaseReader):
         if max_rows > 0:
             for frame in frames:
                 if len(frame) >= max_rows:
+                    last = pd.DatetimeIndex(frame.index[-1:])
+                    # Server local time: drop the "Z" (UTC) label the server attaches
+                    if last.tz is not None:
+                        last = last.tz_localize(None)
                     logger.warning(
                         f"{frame.columns[0]}: returned {max_rows} rows, the row limit; values "
-                        f"after {frame.index[-1]} may be missing (raise limit to read them)"
+                        f"after {last[0]} may be missing (raise limit to read them)"
                     )
 
         logger.debug(f"Parsed data for {len(frames)} tag(s)")
@@ -176,10 +180,12 @@ class SqlHistoryReader(BaseReader):
         # Log response details for debugging
         logger.debug(f"Response status: {response.status_code}")
         logger.debug(f"Response content-type: {response.headers.get('content-type', 'unknown')}")
-        logger.debug(f"Response content (first 500 chars): {response.text[:500]}")
+        if logger.isEnabledFor(logging.DEBUG):
+            # Only decode the body for the log when it is written
+            logger.debug(f"Response content (first 500 chars): {response.text[:500]}")
 
         # Handle empty response (no data available)
-        if not response.text or response.headers.get("content-length") == "0":
+        if not response.content or response.headers.get("content-length") == "0":
             logger.warning(
                 "SQL endpoint returned empty response "
                 "(possibly unsupported tag type or no data in range)"

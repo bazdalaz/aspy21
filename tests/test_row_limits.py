@@ -97,7 +97,11 @@ def test_warning_when_tag_reaches_limit(mock_api, caplog):
     with caplog.at_level(logging.WARNING):
         read(mock_api, {"A": 40, "B": 3}, ["A", "B"], limit=10)
 
-    assert "A: returned 10 rows, the row limit; values after" in caplog.text
+    # The 10th row's server-local time, without the "+00:00" of the server's "Z" label
+    assert (
+        "A: returned 10 rows, the row limit; values after 2025-01-01 00:09:00 may be missing"
+        in caplog.text
+    )
     assert "B: returned" not in caplog.text
 
 

@@ -141,12 +141,12 @@ class AspenCache:
         return hashlib.sha256(key_str.encode()).hexdigest()[:16]
 
     def _evict_if_needed(self) -> None:
-        """Evict oldest entries if cache is full (LRU policy)."""
-        if len(self._cache) >= self.config.max_size:
-            # Sort by creation time and remove oldest
-            oldest_key = min(self._cache.items(), key=lambda x: x[1].created_at)[0]
-            del self._cache[oldest_key]
-            logger.debug(f"Evicted cache entry: {oldest_key}")
+        """Evict the least recently used entry if cache is full (LRU policy)."""
+        if self._cache and len(self._cache) >= self.config.max_size:
+            # Entries are kept in order of use (see get and set), so the first is the LRU
+            lru_key = next(iter(self._cache))
+            del self._cache[lru_key]
+            logger.debug(f"Evicted cache entry: {lru_key}")
 
     def _cleanup_expired(self) -> None:
         """Remove expired entries from cache."""
@@ -186,6 +186,8 @@ class AspenCache:
                 return None
 
             self._hits += 1
+            # Move to the end: most recently used
+            self._cache[key] = self._cache.pop(key)
             logger.debug(f"Cache hit: {operation} (key={key}, {entry})")
             return _copy_value(entry.value)
 
@@ -218,6 +220,8 @@ class AspenCache:
 
         with self._lock:
             self._cleanup_expired()
+            # Replacing an entry moves it to the end and must not evict another one
+            self._cache.pop(key, None)
             self._evict_if_needed()
             entry = CacheEntry(_copy_value(value), ttl_seconds, operation, dict(params))
             self._cache[key] = entry

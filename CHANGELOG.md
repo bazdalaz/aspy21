@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+- RAW, INT and aggregate reads parse response timestamps in one call instead of one by
+  one: parsing 120,000 history rows takes 0.2 s instead of 25 s
+- Response bodies are no longer decoded to text just for DEBUG log messages that are
+  not written
+
+### Fixed
+- The cache evicts the least recently used entry when full, as documented in its
+  docstrings; it evicted the oldest entry even when that entry was in use. Replacing an
+  entry in a full cache no longer evicts another one
+- The warning for a tag that reaches its row limit shows the last time as server local
+  time; it was labelled `+00:00` (UTC) although it is not
+
+### Security
+- `.env.example`, the examples and the scripts verify SSL certificates unless
+  `ASPEN_VERIFY_SSL` is set to false (they turned verification off by default)
+
 ## [0.0.13] - 2026-10-25
 
 ### Fixed
