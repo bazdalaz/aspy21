@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-26
+
+First minor release. 0.1.x releases only add fixes; breaking changes go to 0.2.0 (see
+Versioning in CONTRIBUTING.md). Tested against a production IP.21 server: row limits, tag
+name case, time zones, retries, escaping and large reads.
+
 ### Changed (breaking)
 - Requires Python 3.11 or newer; Python 3.9 and 3.10 are end of life. Tested on 3.11 - 3.15
 - Requires pandas 2.2.2 or newer. Earlier pandas 2 releases fail to import with numpy 2,
@@ -380,7 +386,8 @@ pip install aspy21
 
 This is the first stable release. The API is considered stable and follows semantic versioning. Breaking changes will only occur in major version updates (e.g., 1.0.0).
 
-[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.0.13...HEAD
+[Unreleased]: https://github.com/bazdalaz/aspy21/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/bazdalaz/aspy21/compare/v0.0.13...v0.1.0
 [0.0.13]: https://github.com/bazdalaz/aspy21/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/bazdalaz/aspy21/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/bazdalaz/aspy21/compare/v0.0.10...v0.0.11

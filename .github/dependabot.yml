@@ -1,0 +1,21 @@
+# Monthly update PRs for the toolchain. Runtime dependency floors in pyproject.toml are
+# changed by hand (lockfile-only), as are the exact ruff and pyright pins, which must match
+# the revs in .pre-commit-config.yaml.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: monthly
+    versioning-strategy: lockfile-only
+    groups:
+      locked:
+        patterns: ["*"]
