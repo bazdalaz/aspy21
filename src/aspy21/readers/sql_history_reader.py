@@ -136,13 +136,13 @@ class SqlHistoryReader(BaseReader):
         if max_rows > 0:
             for frame in frames:
                 if len(frame) >= max_rows:
-                    last = pd.Timestamp(frame.index[-1])
+                    last = pd.DatetimeIndex(frame.index[-1:])
                     # Server local time: drop the "Z" (UTC) label the server attaches
-                    if last.tzinfo is not None:
+                    if last.tz is not None:
                         last = last.tz_localize(None)
                     logger.warning(
                         f"{frame.columns[0]}: returned {max_rows} rows, the row limit; values "
-                        f"after {last} may be missing (raise limit to read them)"
+                        f"after {last[0]} may be missing (raise limit to read them)"
                     )
 
         logger.debug(f"Parsed data for {len(frames)} tag(s)")
