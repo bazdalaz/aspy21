@@ -36,7 +36,7 @@ Look for issues labeled `good-first-issue` or `help-wanted` in our [issue tracke
 
 ### Prerequisites
 
-- Python 3.9 or higher
+- Python 3.11 or higher
 - [uv](https://github.com/astral-sh/uv) package manager (recommended)
 - [just](https://just.systems/) task runner (optional but recommended)
 - Git
@@ -59,13 +59,13 @@ Look for issues labeled `good-first-issue` or `help-wanted` in our [issue tracke
 3. **Create a virtual environment and install dependencies**
 
    ```bash
-   # Using uv (recommended)
-   uv pip install -e ".[dev]"
+   # Using uv (recommended): creates .venv with the versions in uv.lock
+   uv sync --all-extras
 
-   # Or using standard pip
+   # Or using standard pip (25.1 or newer, for --group)
    python -m venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   pip install -e ".[dev]"
+   pip install -e ".[examples]" --group dev
    ```
 
 4. **Install pre-commit hooks**

@@ -52,9 +52,9 @@ pip install aspy21
 
 ### Requirements
 
-- Python 3.9+
+- Python 3.11+
 - httpx >= 0.27
-- pandas >= 2.0
+- pandas >= 2.2.2
 - tenacity >= 9.0
 
 ---
@@ -955,8 +955,9 @@ except httpx.RequestError as e:
 ### Running Tests
 
 ```bash
-# Install development dependencies
-pip install -e ".[dev]"
+# Install development dependencies (uv installs the dev group by default)
+uv sync --all-extras
+# or with pip 25.1+: pip install -e ".[examples]" --group dev
 
 # Run tests
 pytest

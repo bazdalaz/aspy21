@@ -4,7 +4,7 @@ This guide will help you set up your development environment for the aspy21 proj
 
 ## Prerequisites
 
-- Python 3.9+ installed
+- Python 3.11+ installed
 - [uv](https://github.com/astral-sh/uv) package manager
 - [just](https://just.systems/) task runner (optional but recommended)
 
@@ -19,7 +19,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ### 2. Install dependencies
 
 ```bash
-uv pip install -e ".[dev]"
+uv sync --all-extras
 ```
 
 ### 3. Setup pre-commit hooks
@@ -100,7 +100,8 @@ This project uses the latest Python tooling:
 ## CI/CD
 
 GitHub Actions automatically:
-- Tests on Python 3.9, 3.10, 3.11, 3.12, 3.13
+- Tests on Python 3.11 - 3.15 with the locked versions (`uv.lock`), and on 3.11 with the
+  oldest versions `pyproject.toml` allows
 - Runs linting, formatting, and type checking
 - Reports test coverage to Codecov
 - Publishes to PyPI on version tags

@@ -19,9 +19,9 @@ from .utils import check_timezone, localize_server_index, server_now, tag_key, t
 
 if TYPE_CHECKING:
     from datetime import tzinfo
+    from typing import Self
 
     from httpx import Auth
-    from typing_extensions import Self
 
 logger = logging.getLogger(__name__)
 

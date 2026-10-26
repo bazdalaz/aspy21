@@ -54,7 +54,7 @@ def read(
 
 
 def counts(df: pd.DataFrame, tags: list[str]) -> dict[str, int]:
-    return {tag: int(df[tag].count()) if tag in df.columns else 0 for tag in tags}
+    return {tag: len(df[tag].dropna()) if tag in df.columns else 0 for tag in tags}
 
 
 @pytest.mark.parametrize(

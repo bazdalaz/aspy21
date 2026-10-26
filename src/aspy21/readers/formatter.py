@@ -203,7 +203,9 @@ class JsonFormatter(OutputFormatter):
                     if self.include_status and status_col in frame.columns
                     else None
                 )
-                for position, (idx, value) in enumerate(zip(frame.index, frame[tag].tolist())):
+                for position, (idx, value) in enumerate(
+                    zip(frame.index, frame[tag].tolist(), strict=True)
+                ):
                     if not _is_present(value):
                         continue
 

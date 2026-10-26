@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (breaking)
+- Requires Python 3.11 or newer; Python 3.9 and 3.10 are end of life. Tested on 3.11 - 3.15
+- Requires pandas 2.2.2 or newer. Earlier pandas 2 releases fail to import with numpy 2,
+  which pip installs alongside them
+- `ReaderType`, `IncludeFields` and `OutputFormat` are `StrEnum`s: `str(ReaderType.RAW)` and
+  f-strings give `"RAW"` instead of `"ReaderType.RAW"`. Comparisons with strings are unchanged
+- Development tools moved from the `dev` extra to a `dev` dependency group (PEP 735):
+  `uv sync`, or `pip install -e . --group dev` with pip 25.1+. `uv.lock` pins them for
+  development and CI
+
 ### Performance
 - RAW, INT and aggregate reads parse response timestamps in one call instead of one by
   one: parsing 120,000 history rows takes 0.2 s instead of 25 s

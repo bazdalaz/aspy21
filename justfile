@@ -5,9 +5,9 @@
 default:
     @just --list
 
-# Install dependencies with uv
+# Install dependencies with uv (the versions in uv.lock)
 install:
-    uv pip install -e ".[dev]"
+    uv sync --all-extras
 
 # Install pre-commit hooks
 setup-hooks:

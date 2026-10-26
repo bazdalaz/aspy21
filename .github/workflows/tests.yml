@@ -7,12 +7,17 @@ on:
 
 jobs:
   test:
-    # ubuntu-latest (26.04) has no Python 3.9 builds; 24.04 has every version below
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false  # report every Python version, not only the first failure
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
+        resolution: ["locked"]
+        include:
+          # The oldest versions pyproject.toml allows (pandas 2.2.2, httpx 0.27, ...)
+          - python-version: "3.11"
+            resolution: "lowest-direct"
+    name: test (${{ matrix.python-version }}, ${{ matrix.resolution }})
 
     steps:
       - uses: actions/checkout@v7
@@ -20,14 +25,18 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v10.3.2  # no floating major tags since v8
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v7
-        with:
-          python-version: ${{ matrix.python-version }}
+      - name: Install locked dependencies
+        if: matrix.resolution == 'locked'
+        run: uv sync --locked --all-extras --python ${{ matrix.python-version }}
 
-      - name: Install dependencies
+      - name: Install oldest allowed dependencies
+        if: matrix.resolution == 'lowest-direct'
         run: |
-          uv pip install --system -e ".[dev]"
+          uv venv --python ${{ matrix.python-version }}
+          uv pip install -e ".[examples]" --group dev --resolution lowest-direct
+
+      - name: Put the environment on PATH
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Ruff lint
         run: ruff check .
@@ -43,7 +52,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
-        if: matrix.python-version == '3.11'
+        if: matrix.python-version == '3.13' && matrix.resolution == 'locked'
         with:
           files: ./coverage.xml
           fail_ci_if_error: false

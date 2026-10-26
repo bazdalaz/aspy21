@@ -7,7 +7,7 @@ An IP.21 server in a UTC+3 zone showed that:
   and getdbtime returned "08:17:10Z" when UTC was 05:17.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, cast
 
 import httpx
@@ -82,7 +82,7 @@ def test_aware_input_is_converted_to_server_timezone(mock_api, read_type):
 
 
 def test_aware_input_without_server_timezone_uses_local_zone():
-    utc = datetime(2026, 1, 15, 12, 0, tzinfo=timezone.utc)
+    utc = datetime(2026, 1, 15, 12, 0, tzinfo=UTC)
     expected = utc.astimezone().replace(tzinfo=None)
 
     assert to_server_time("2026-01-15T12:00:00Z", None) == pd.Timestamp(expected)

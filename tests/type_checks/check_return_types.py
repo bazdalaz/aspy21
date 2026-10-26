@@ -6,8 +6,9 @@ fails `pyright` with an assert_type error.
 
 from __future__ import annotations
 
+from typing import assert_type
+
 import pandas as pd
-from typing_extensions import assert_type
 
 from aspy21 import AspenClient, IncludeFields, OutputFormat, ReaderType
 
