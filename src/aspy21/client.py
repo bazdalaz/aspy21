@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import os
@@ -18,6 +19,7 @@ from .retry import send
 from .utils import check_timezone, localize_server_index, server_now, tag_key, to_server_time
 
 if TYPE_CHECKING:
+    import ssl
     from datetime import tzinfo
     from typing import Self
 
@@ -29,6 +31,17 @@ logger = logging.getLogger(__name__)
 DEFAULT_TIMEOUT = 30.0  # seconds
 
 _READ_CACHE_OPERATIONS = ("read_historical", "read_aggregates", "read_snapshot")
+
+
+@functools.cache
+def _default_ssl_context() -> ssl.SSLContext:
+    """Return the certificate-checking SSL context shared by all clients.
+
+    httpx builds a new context for every client and loads the certifi bundle each time,
+    which takes about 0.5 s on Windows. SSL_CERT_FILE and SSL_CERT_DIR are read when the
+    first client is created.
+    """
+    return httpx.create_ssl_context()
 
 
 def configure_logging(level: str | None = None) -> None:
@@ -157,7 +170,8 @@ class AspenClient:
         # Support dependency injection of HTTP client
         self._owns_client = http_client is None
         if http_client is None:
-            self._client = httpx.Client(timeout=timeout, verify=verify_ssl, auth=auth)
+            verify = _default_ssl_context() if verify_ssl else False
+            self._client = httpx.Client(timeout=timeout, verify=verify, auth=auth)
         else:
             self._client = http_client
             ignored = [
