@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The cache evicts the least recently used entry when full, as documented in its
   docstrings; it evicted the oldest entry even when that entry was in use. Replacing an
   entry in a full cache no longer evicts another one
+- The warning for a tag that reaches its row limit shows the last time as server local
+  time; it was labelled `+00:00` (UTC) although it is not
 
 ### Security
 - `.env.example`, the examples and the scripts verify SSL certificates unless
