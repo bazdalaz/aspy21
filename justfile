@@ -5,45 +5,45 @@
 default:
     @just --list
 
-# Install dependencies with uv (the versions in uv.lock)
+# Install the versions in uv.lock (fails if uv.lock is out of date with pyproject.toml)
 install:
-    uv sync --all-extras
+    uv sync --locked --all-extras
 
 # Install pre-commit hooks
 setup-hooks:
-    pre-commit install
+    uv run pre-commit install
 
 # Run all tests with coverage
 test:
-    pytest
+    uv run pytest
 
 # Run tests with verbose output
 test-verbose:
-    pytest -vv
+    uv run pytest -vv
 
 # Run specific test file
 test-file file:
-    pytest {{file}} -v
+    uv run pytest {{file}} -v
 
 # Run linter (ruff check)
 lint:
-    ruff check .
+    uv run ruff check .
 
 # Run linter and auto-fix issues
 lint-fix:
-    ruff check --fix .
+    uv run ruff check --fix .
 
 # Format code with ruff
 format:
-    ruff format .
+    uv run ruff format .
 
 # Check formatting without making changes
 format-check:
-    ruff format --check .
+    uv run ruff format --check .
 
 # Run type checking with pyright
 typecheck:
-    pyright
+    uv run pyright
 
 # Run all quality checks (lint, format, typecheck)
 check: lint format-check typecheck
@@ -58,11 +58,11 @@ clean:
 
 # Build distribution packages
 build: clean
-    python -m build
+    uv build
 
 # Build and check distribution
 build-check: build
-    twine check dist/*
+    uv run twine check dist/*
 
 # Upload to TestPyPI (reads credentials from .env)
 publish-test: build-check
@@ -73,7 +73,7 @@ publish-test: build-check
         export TWINE_USERNAME="${PYPI_TEST_USERNAME}"
         export TWINE_PASSWORD="${PYPI_TEST_TOKEN}"
     fi
-    twine upload --repository testpypi dist/*
+    uv run twine upload --repository testpypi dist/*
 
 # Upload to production PyPI (reads credentials from .env)
 publish: build-check
@@ -87,15 +87,15 @@ publish: build-check
         export TWINE_USERNAME="${PYPI_USERNAME}"
         export TWINE_PASSWORD="${PYPI_TOKEN}"
     fi
-    twine upload dist/*
+    uv run twine upload dist/*
 
 # Run pre-commit on all files
 pre-commit:
-    pre-commit run --all-files
+    uv run pre-commit run --all-files
 
 # Update pre-commit hooks
 update-hooks:
-    pre-commit autoupdate
+    uv run pre-commit autoupdate
 
 # Install development dependencies with uv
 dev-install: install setup-hooks
@@ -103,11 +103,11 @@ dev-install: install setup-hooks
 
 # Show current version (from git tags)
 version:
-    @python -c "from setuptools_scm import get_version; print(get_version())"
+    @uv run python -c "from setuptools_scm import get_version; print(get_version())"
 
 # Show next version for different bump types
 version-next:
-    #!/usr/bin/env python3
+    #!/usr/bin/env -S uv run python
     import re
     from setuptools_scm import get_version
 
@@ -135,7 +135,7 @@ version-next:
 # Bump version (create git tag)
 # Usage: just bump <major|minor|patch|beta|rc|release> [--yes] [--push]
 bump PART *ARGS:
-    python3 scripts/bump_version.py {{PART}} {{ARGS}}
+    uv run python scripts/bump_version.py {{PART}} {{ARGS}}
 
 # Create a git tag manually
 # Usage: just tag v0.1.0b9
