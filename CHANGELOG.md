@@ -28,6 +28,9 @@ name case, time zones, retries, escaping and large reads.
   one: parsing 120,000 history rows takes 0.2 s instead of 25 s
 - Response bodies are no longer decoded to text just for DEBUG log messages that are
   not written
+- Clients share one certificate-checking SSL context instead of each loading the
+  certifi bundle: creating a client took 0.4 - 0.6 s on Windows, now about 1 ms after
+  the first one
 
 ### Fixed
 - The cache evicts the least recently used entry when full, as documented in its
